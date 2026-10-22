@@ -1,0 +1,57 @@
+{
+  "rankbm25": {
+    "group": "Tài liệu chính thức và mã nguồn",
+    "kind": "Mã nguồn",
+    "authors": "Brown, D.",
+    "year": "2022",
+    "title": "Rank-BM25: A two line search engine (A Collection of BM25 Algorithms in Python)",
+    "short": "rank_bm25",
+    "venue": "GitHub, phiên bản PyPI 0.2.2 (02/2022), giấy phép Apache-2.0",
+    "url": "https://github.com/dorianbrown/rank_bm25",
+    "why": "Thư viện Python cài đặt Okapi BM25 và các biến thể (BM25L, BM25+…). README nhấn mạnh thư viện không tiền xử lý văn bản: người dùng tự tách từ, hạ chữ thường, và phải tách truy vấn cùng cách với tài liệu."
+  },
+  "sbert-encode": {
+    "group": "Tài liệu chính thức và mã nguồn",
+    "kind": "Tài liệu chính thức",
+    "authors": "Sentence Transformers (UKP Lab, Hugging Face)",
+    "year": "2026",
+    "title": "SentenceTransformer — API reference (encode, encode_query, encode_document)",
+    "short": "Sentence Transformers: SentenceTransformer API",
+    "venue": "sbert.net, tài liệu bản v6.x (truy cập 10/2026)",
+    "url": "https://sbert.net/docs/package_reference/sentence_transformer/SentenceTransformer.html",
+    "why": "Mô tả tham số của encode() như normalize_embeddings (mặc định False), batch_size, prompt, và hai phương thức encode_query/encode_document dùng prompt riêng cho truy vấn và tài liệu."
+  },
+  "sbert-similarity": {
+    "group": "Tài liệu chính thức và mã nguồn",
+    "kind": "Tài liệu chính thức",
+    "authors": "Sentence Transformers (UKP Lab, Hugging Face)",
+    "year": "2026",
+    "title": "Semantic Textual Similarity — Sentence Transformers documentation",
+    "short": "Sentence Transformers: similarity",
+    "venue": "sbert.net (truy cập 10/2026)",
+    "url": "https://sbert.net/docs/sentence_transformer/usage/semantic_textual_similarity.html",
+    "why": "Liệt kê các hàm tương đồng (cosine mặc định, dot, Euclid, Manhattan) và nêu rằng tích vô hướng trên vector đã chuẩn hóa tương đương cosine nhưng nhanh hơn."
+  },
+  "sbert-pypi": {
+    "group": "Tài liệu chính thức và mã nguồn",
+    "kind": "Tài liệu chính thức",
+    "authors": "Sentence Transformers (UKP Lab, Hugging Face)",
+    "year": "2026",
+    "title": "sentence-transformers · PyPI",
+    "short": "sentence-transformers trên PyPI",
+    "venue": "PyPI, bản 6.2.0 phát hành 21/10/2026",
+    "url": "https://pypi.org/project/sentence-transformers/",
+    "why": "Trang phát hành chính thức: phiên bản mới nhất, yêu cầu Python ≥ 3.10 và lệnh cài đặt. Kiểm tra lại trước khi chạy vì thư viện cập nhật thường xuyên."
+  },
+  "me5small": {
+    "group": "Tài liệu chính thức và mã nguồn",
+    "kind": "Tài liệu chính thức",
+    "authors": "Wang, L., et al. (intfloat)",
+    "year": "2024",
+    "title": "intfloat/multilingual-e5-small — model card",
+    "short": "multilingual-e5-small (model card)",
+    "venue": "Hugging Face Hub, giấy phép MIT",
+    "url": "https://huggingface.co/intfloat/multilingual-e5-small",
+    "why": "Thẻ mô hình: 12 lớp, vector 384 chiều, cắt văn bản ở 512 token; yêu cầu tiền tố “query: ” và “passage: ” (kể cả với văn bản không phải tiếng Anh), và giải thích vì sao điểm cosine thường dồn trong khoảng 0,7–1,0."
+  }
+}

@@ -1,0 +1,84 @@
+{
+  "sections": [
+    {
+      "id": "nen-tang",
+      "num": "1",
+      "title": "Nền tảng RAG",
+      "intro": "RAG là gì, giải quyết vấn đề gì, khi nào nên dùng và khi nào không. Phần này dựng bản đồ toàn cảnh mà các phần sau sẽ đi sâu vào từng mảnh.",
+      "questions": ["Vì sao mô hình ngôn ngữ cần truy hồi tài liệu bên ngoài?", "RAG khác fine-tuning, long context và gọi công cụ ở điểm nào?", "Một hệ thống RAG gồm những thành phần nào và chúng nối với nhau ra sao?"],
+      "pages": ["rag-la-gi", "khi-nao-dung-rag", "kien-truc-tong-quan"]
+    },
+    {
+      "id": "du-lieu",
+      "num": "2",
+      "title": "Dữ liệu, chunking & metadata",
+      "intro": "Chất lượng RAG bị chặn trên bởi chất lượng dữ liệu được đưa vào chỉ mục. Phần này đi từ thu thập, làm sạch tới cách cắt tài liệu và gắn metadata.",
+      "questions": ["Làm sao trích xuất văn bản sạch từ PDF, HTML, bảng biểu?", "Nên cắt tài liệu dài bao nhiêu, theo ranh giới nào?", "Metadata và ngữ cảnh bổ sung giúp truy hồi chính xác hơn như thế nào?"],
+      "prereq": "[[link:nen-tang/kien-truc-tong-quan]]",
+      "pages": ["thu-thap-lam-sach", "chunking", "metadata-va-bieu-dien"]
+    },
+    {
+      "id": "truy-hoi",
+      "num": "3",
+      "title": "Embedding, indexing & retrieval",
+      "intro": "Cách biến văn bản thành vector, cách tìm vector gần nhất trong hàng triệu bản ghi đủ nhanh, và những đánh đổi giữa độ chính xác, bộ nhớ và tốc độ.",
+      "questions": ["Embedding thể hiện “ý nghĩa” bằng cách nào và giới hạn ở đâu?", "Chọn mô hình embedding dựa trên tiêu chí gì, có nên tin bảng xếp hạng?", "HNSW, IVF, PQ khác nhau ra sao và khi nào cần đến chúng?"],
+      "prereq": "[[link:du-lieu/chunking]]",
+      "pages": ["embedding", "vector-index"]
+    },
+    {
+      "id": "tim-kiem",
+      "num": "4",
+      "title": "Hybrid search, reranking & truy vấn",
+      "intro": "Kết hợp tìm kiếm từ khóa với tìm kiếm ngữ nghĩa, xếp hạng lại kết quả bằng mô hình mạnh hơn, và biến câu hỏi của người dùng thành truy vấn tốt hơn.",
+      "questions": ["Vì sao BM25 vẫn quan trọng khi đã có embedding?", "Reranker cải thiện kết quả bằng cơ chế nào và tốn bao nhiêu?", "Khi nào nên viết lại, tách hoặc mở rộng truy vấn?"],
+      "prereq": "[[link:truy-hoi/embedding]]",
+      "pages": ["hybrid-search", "reranking", "xu-ly-truy-van"]
+    },
+    {
+      "id": "sinh",
+      "num": "5",
+      "title": "Context, generation & trích dẫn",
+      "intro": "Sau khi tìm được tài liệu, cần sắp xếp chúng vào ngữ cảnh, hướng dẫn mô hình trả lời trung thực và chỉ ra nguồn cho từng nhận định.",
+      "questions": ["Đưa bao nhiêu đoạn vào prompt, theo thứ tự nào?", "Làm sao để mô hình nói “không biết” thay vì bịa?", "Trích dẫn kiểm chứng được cần thiết kế ra sao?"],
+      "prereq": "[[link:tim-kiem/reranking]]",
+      "pages": ["xay-dung-context", "trich-dan-grounding"]
+    },
+    {
+      "id": "danh-gia",
+      "num": "6",
+      "title": "Đánh giá, chẩn đoán & cải tiến",
+      "intro": "Không đo thì không cải thiện được. Phần này tách đánh giá thành retrieval và generation, chỉ cách xây bộ dữ liệu kiểm thử và lần ra nguyên nhân lỗi.",
+      "questions": ["Đo chất lượng truy hồi bằng chỉ số nào: Recall@k, MRR hay nDCG?", "LLM-as-a-judge đáng tin tới đâu?", "Câu trả lời sai: lỗi do dữ liệu, truy hồi hay sinh?"],
+      "prereq": "[[link:sinh/trich-dan-grounding]]",
+      "pages": ["do-luong-retrieval", "danh-gia-generation", "chan-doan-loi"]
+    },
+    {
+      "id": "van-hanh",
+      "num": "7",
+      "title": "Vận hành, chi phí & bảo mật",
+      "intro": "Đưa RAG vào sản xuất: ngân sách độ trễ, chi phí theo truy vấn, cập nhật chỉ mục, giám sát, phân quyền và các rủi ro bảo mật riêng của RAG.",
+      "questions": ["Độ trễ một truy vấn RAG nằm ở đâu và tối ưu thế nào?", "Làm sao để người dùng chỉ thấy tài liệu họ có quyền xem?", "Prompt injection gián tiếp và đầu độc dữ liệu hoạt động ra sao?"],
+      "prereq": "[[link:danh-gia/chan-doan-loi]]",
+      "pages": ["chi-phi-do-tre", "bao-mat"]
+    },
+    {
+      "id": "nang-cao",
+      "num": "8",
+      "title": "Hướng nâng cao & ứng dụng",
+      "intro": "Các biến thể vượt ra ngoài pipeline “truy hồi một lần rồi sinh”: truy hồi lặp, agentic RAG, GraphRAG, cùng những tình huống ứng dụng điển hình và bài học từ chúng.",
+      "questions": ["Khi nào pipeline cố định không đủ và cần agent tự quyết định truy hồi?", "GraphRAG phù hợp với loại câu hỏi nào?", "Các bài toán thực tế (hỗ trợ khách hàng, tài liệu nội bộ, pháp lý…) đòi hỏi gì khác nhau?"],
+      "prereq": "[[link:danh-gia/do-luong-retrieval]]",
+      "pages": ["agentic-graphrag", "tinh-huong-ung-dung"]
+    },
+    {
+      "id": "thuc-hanh",
+      "num": "9",
+      "title": "Thực hành",
+      "intro": "Ghép mọi mảnh lại: dựng một pipeline RAG tối thiểu có đánh giá đi kèm, và một danh sách kiểm tra trước khi đưa vào sử dụng.",
+      "questions": ["Viết pipeline RAG đầu tiên với ít phụ thuộc nhất như thế nào?", "Trước khi phát hành cần kiểm tra những gì?"],
+      "prereq": "[[link:nen-tang/kien-truc-tong-quan]]",
+      "pages": ["rag-dau-tien", "checklist-trien-khai"]
+    }
+  ]
+}

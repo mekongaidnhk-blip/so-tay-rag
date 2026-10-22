@@ -1,0 +1,244 @@
+---
+{
+  "title": "Đánh giá câu trả lời: faithfulness, độ đúng và LLM-as-a-judge đáng tin tới đâu?",
+  "navTitle": "Đánh giá generation",
+  "description": "Các chiều chất lượng của câu trả lời RAG (faithfulness, answer relevance, correctness, completeness), RAGAS và ARES, LLM-as-a-judge cùng các thiên lệch của nó, thiết kế rubric, hiệu chỉnh với nhãn người, vấn đề riêng của tiếng Việt và kiểm thử hồi quy.",
+  "lead": "Truy hồi đúng chưa đủ: mô hình vẫn có thể diễn giải sai, bịa thêm, hoặc trả lời lạc đề. Đo câu trả lời khó hơn đo truy hồi vì không có danh sách mã để so, nên phần lớn hệ thống dựa vào một LLM làm giám khảo. Bài này chỉ ra cần đo những gì, các framework hiện có làm gì, và làm sao biết giám khảo của bạn đáng tin.",
+  "level": "Trung cấp",
+  "reviewed": "2026-10-22",
+  "kinds": ["nen-tang", "nghien-cuu", "kinh-nghiem", "nhan-dinh"]
+}
+---
+<div class="callout tom-tat">
+<ul>
+<li>Tách chất lượng câu trả lời thành nhiều chiều đo riêng: <strong>faithfulness</strong> (bám ngữ cảnh), <strong>answer relevance</strong> (trả lời đúng câu hỏi), <strong>correctness</strong> (khớp đáp án tham chiếu), <strong>completeness</strong> (đủ ý), cộng với hành vi từ chối và định dạng.</li>
+<li>RAGAS và ARES tự động hóa việc chấm bằng mô hình; ARES dùng thêm vài trăm nhãn người để hiệu chỉnh sai số thống kê của giám khảo.</li>
+<li><strong>LLM-as-a-judge</strong> đạt mức đồng thuận cao với người trong một số thiết lập, nhưng có thiên lệch đã được ghi nhận: <em>vị trí</em>, <em>độ dài</em>, <em>tự ưu ái</em>. Phải hiệu chỉnh giám khảo trên nhãn người của chính dữ liệu bạn trước khi tin.</li>
+<li>Với tiếng Việt, năng lực tiếng Việt của mô hình giám khảo là một biến số cần đo, không phải giả định.</li>
+<li>Đưa bộ đánh giá vào CI để mỗi thay đổi prompt, mô hình hay chỉ mục đều được chạy hồi quy.</li>
+</ul>
+</div>
+
+<h2>Đo cái gì: các chiều chất lượng</h2>
+<div class="callout nen-tang">
+<p><strong>Hai loại đánh giá.</strong> Đánh giá <em>có tham chiếu</em> (reference-based) so câu trả lời với một đáp án đúng do người soạn; đánh giá <em>không tham chiếu</em> (reference-free) chỉ so câu trả lời với câu hỏi và ngữ cảnh. Loại thứ nhất đo được độ đúng nhưng cần công soạn đáp án; loại thứ hai chạy được trên mọi truy vấn thật nhưng chỉ đo được tính nhất quán với ngữ cảnh, không đo được sự thật. Hệ thống đánh giá đầy đủ cần cả hai.</p>
+</div>
+<p>“Câu trả lời tốt” gồm nhiều tính chất có thể mâu thuẫn nhau. Một câu trả lời rất ngắn có thể trung thực tuyệt đối nhưng thiếu ý; một câu dài, đầy đủ có thể lẫn một nhận định bịa. Gộp tất cả vào một điểm “chất lượng 1–10” khiến bạn không biết sửa gì. Thực hành phổ biến là đo riêng từng chiều:</p>
+<table>
+<thead><tr><th>Chiều</th><th>Câu hỏi</th><th>Cần đáp án tham chiếu?</th><th>Lỗi điển hình nếu điểm thấp</th></tr></thead>
+<tbody>
+<tr><td><strong>Faithfulness / groundedness</strong></td><td>Mọi nhận định có suy ra được từ ngữ cảnh?</td><td>Không — so với ngữ cảnh</td><td>Hallucination, trộn kiến thức tham số</td></tr>
+<tr><td><strong>Answer relevance</strong></td><td>Câu trả lời có trả lời đúng câu được hỏi?</td><td>Không</td><td>Lạc đề, trả lời câu dễ hơn, lan man</td></tr>
+<tr><td><strong>Correctness</strong></td><td>Có khớp đáp án đúng?</td><td>Có</td><td>Dữ liệu sai, truy hồi sai, suy luận sai</td></tr>
+<tr><td><strong>Completeness</strong></td><td>Có đủ các ý cần thiết?</td><td>Có (danh sách ý cần có)</td><td>Thiếu điều kiện, ngoại lệ; chỉ dùng một trong nhiều đoạn</td></tr>
+<tr><td><strong>Abstention</strong></td><td>Có từ chối đúng lúc, không từ chối thừa?</td><td>Có (nhãn “trả lời được / không”)</td><td>Bịa khi không có thông tin, hoặc từ chối dù có</td></tr>
+<tr><td><strong>Citation quality</strong></td><td>Trích dẫn có hỗ trợ nhận định?</td><td>Không</td><td>Xem [[link:sinh/trich-dan-grounding]]</td></tr>
+</tbody>
+</table>
+<p>Faithfulness và correctness kết hợp cho thông tin chẩn đoán: <em>trung thực nhưng sai</em> gợi ý lỗi dữ liệu hoặc truy hồi; <em>đúng nhưng không trung thực</em> gợi ý mô hình đang dựa vào trí nhớ — một lỗi tiềm ẩn sẽ lộ ra khi tài liệu thay đổi. Phối hợp với chỉ số truy hồi ở [[link:danh-gia/do-luong-retrieval]] cho phép khoanh vùng lỗi theo từng khâu ([[link:danh-gia/chan-doan-loi]]).</p>
+
+<h2>Ba cách chấm: so khớp, mô hình, con người</h2>
+<table>
+<thead><tr><th>Cách</th><th>Ví dụ</th><th>Ưu</th><th>Nhược</th></tr></thead>
+<tbody>
+<tr><td>So khớp chuỗi / từ vựng</td><td>Exact match, chứa đáp án ngắn, trùng từ với đáp án</td><td>Rẻ, tất định</td><td>Chỉ hợp với đáp án ngắn (số, ngày, tên). Câu trả lời tự do tiếng Việt có nhiều cách diễn đạt; “15 ngày” và “mười lăm ngày” không khớp</td></tr>
+<tr><td>Mô hình chấm</td><td>LLM-as-a-judge, mô hình NLI, judge nhỏ được fine-tune</td><td>Linh hoạt, mở rộng được</td><td>Có thiên lệch, tốn chi phí, kết quả phụ thuộc phiên bản mô hình</td></tr>
+<tr><td>Con người</td><td>Chuyên gia nghiệp vụ chấm theo hướng dẫn</td><td>Chuẩn mực cuối cùng, hiểu ngữ cảnh nghiệp vụ</td><td>Chậm, đắt, cũng không nhất quán tuyệt đối</td></tr>
+</tbody>
+</table>
+<div class="callout kinh-nghiem">
+<p>Hệ thống đánh giá thực tế thường dùng cả ba: so khớp cho các trường cấu trúc (con số, mã điều khoản, câu từ chối cố định), mô hình chấm cho các chiều ngữ nghĩa trên toàn bộ tập, và con người để hiệu chỉnh mô hình chấm trên một mẫu và để chấm các ca tranh chấp.</p>
+</div>
+
+<h2>Các framework: RAGAS và ARES</h2>
+<h3>RAGAS</h3>
+<div class="callout nghien-cuu">
+<p>RAGAS (Es và cộng sự, EACL 2024 Demo) đề xuất bộ chỉ số đánh giá RAG <em>không cần nhãn tham chiếu</em>: faithfulness, answer relevance và context relevance, đều tính bằng LLM[[cite:es2023ragas]]. Theo tài liệu hiện hành của thư viện Ragas (tính đến 10/2026), faithfulness được tính bằng cách tách câu trả lời thành các nhận định, kiểm tra từng nhận định có suy ra được từ ngữ cảnh không, rồi lấy tỷ lệ nhận định được hỗ trợ; có biến thể thay LLM bằng bộ phân loại HHEM để rẻ hơn[[cite:ragas2025faith]].</p>
+</div>
+<p>Ví dụ: câu trả lời “Chương trình hoàn tiền 5% áp dụng cho thẻ tín dụng hạng Vàng, tối đa 500.000đ mỗi tháng” tách thành hai nhận định. Ngữ cảnh chỉ nói “hoàn tiền 5% cho chủ thẻ hạng Vàng” mà không nói hạn mức → faithfulness = 1/2. Con số “500.000đ” là ứng viên hallucination cần xem.</p>
+<div class="callout canh-bao">
+<p>API và định nghĩa trong thư viện Ragas thay đổi qua các phiên bản (tài liệu ghi một số API cũ sẽ bị loại bỏ ở 0.4 và 1.0). Hãy ghim phiên bản thư viện, phiên bản LLM giám khảo, và lưu chúng cùng kết quả — nếu không, điểm tháng này và tháng trước không so được.</p>
+</div>
+
+<h3>ARES</h3>
+<div class="callout nghien-cuu">
+<p>ARES (Saad-Falcon, Khattab, Potts, Zaharia — NAACL 2024) đi theo hướng khác: sinh dữ liệu huấn luyện tổng hợp, fine-tune các <em>judge nhỏ</em> để chấm ba chiều context relevance, answer faithfulness, answer relevance, rồi dùng một tập nhỏ nhãn người (vài trăm mẫu) cùng kỹ thuật <strong>prediction-powered inference</strong> (PPI) để hiệu chỉnh sai số thống kê của judge. Các tác giả báo cáo ARES đánh giá chính xác trên tám tác vụ từ KILT, SuperGLUE và AIS, và judge giữ được độ chính xác khi loại truy vấn hoặc tài liệu thay đổi[[cite:saadfalcon2023ares]].</p>
+</div>
+<p>Ý tưởng đáng mượn từ ARES ngay cả khi không dùng framework: <strong>giám khảo tự động luôn có sai số, và một mẫu nhãn người nhỏ có thể dùng để ước lượng và hiệu chỉnh sai số đó</strong>, thay vì coi điểm giám khảo là sự thật.</p>
+
+<h2>LLM-as-a-judge: mạnh nhưng có thiên lệch</h2>
+<div class="callout nghien-cuu">
+<p>Zheng và cộng sự (NeurIPS 2023 Datasets and Benchmarks) nghiên cứu việc dùng LLM mạnh làm giám khảo cho câu hỏi mở, trên MT-bench và Chatbot Arena. GPT-4 đạt trên 80% đồng thuận với sở thích của người — ngang mức đồng thuận giữa người với nhau. Bài báo đồng thời chỉ ra các thiên lệch: <strong>position bias</strong> (ưu ái câu trả lời ở một vị trí nhất định khi so cặp), <strong>verbosity bias</strong> (ưu ái câu dài hơn), <strong>self-enhancement bias</strong> (ưu ái câu do chính mô hình đó hoặc cùng họ sinh ra), và giới hạn về năng lực suy luận khi chấm bài toán[[cite:zheng2023judge]].</p>
+<p>Wang và cộng sự cho thấy thiên lệch vị trí có thể rất mạnh: chỉ cần đổi thứ tự hai câu trả lời, với ChatGPT làm giám khảo, Vicuna-13B “thắng” ChatGPT ở 66 trên 80 câu hỏi được thử. Họ đề xuất yêu cầu giám khảo đưa bằng chứng trước khi chấm và gộp kết quả qua cả hai thứ tự[[cite:wang2023fair]].</p>
+<p><em>Điều kiện:</em> các kết quả này đo trên hội thoại mở tiếng Anh với mô hình năm 2023, chủ yếu ở dạng so sánh cặp. Chấm faithfulness của câu trả lời RAG tiếng Việt là một bài toán khác; mức đồng thuận phải được đo lại.</p>
+</div>
+<p>Các biện pháp giảm thiên lệch thường dùng:</p>
+<table>
+<thead><tr><th>Thiên lệch</th><th>Biện pháp</th></tr></thead>
+<tbody>
+<tr><td>Vị trí (khi so cặp A/B)</td><td>Chấm cả hai thứ tự, chỉ tính thắng khi nhất quán; hoặc chuyển sang chấm từng câu (pointwise)</td></tr>
+<tr><td>Độ dài</td><td>Rubric ghi rõ “không cộng điểm cho độ dài”; chấm faithfulness theo từng nhận định thay vì ấn tượng chung; theo dõi tương quan điểm–độ dài</td></tr>
+<tr><td>Tự ưu ái</td><td>Dùng giám khảo khác họ với mô hình sinh, hoặc kiểm tra chéo bằng hai giám khảo</td></tr>
+<tr><td>Suy luận kém, chấm ẩu</td><td>Yêu cầu trích bằng chứng từ ngữ cảnh trước khi cho điểm; tách một tiêu chí mỗi lần gọi; đưa đáp án tham chiếu khi có</td></tr>
+<tr><td>Không ổn định giữa các lần chạy</td><td>Nhiệt độ thấp, chạy lặp vài lần trên mẫu để đo độ dao động; ghim phiên bản mô hình</td></tr>
+</tbody>
+</table>
+
+<h2>Thiết kế rubric chấm điểm</h2>
+<p><strong>Rubric</strong> (thang chấm) là phần quan trọng nhất của một giám khảo LLM — quan trọng hơn việc chọn mô hình nào. Các nguyên tắc rút ra từ thực hành:</p>
+<ol>
+<li><strong>Một tiêu chí mỗi lần chấm.</strong> Chấm faithfulness, relevance, completeness trong cùng một lời gọi khiến các tiêu chí ảnh hưởng lẫn nhau.</li>
+<li><strong>Thang ngắn, có mô tả mốc.</strong> Nhị phân (đạt / không đạt) hoặc ba mức, mỗi mức có định nghĩa cụ thể. Thang 1–10 không có mốc thường cho điểm dồn về giữa và khó hiệu chỉnh.</li>
+<li><strong>Bằng chứng trước, điểm sau.</strong> Yêu cầu giám khảo liệt kê nhận định và trích đoạn ngữ cảnh tương ứng trước khi kết luận — cùng tinh thần với đề xuất của Wang và cộng sự[[cite:wang2023fair]].</li>
+<li><strong>Đầu ra có cấu trúc</strong> (JSON) để tổng hợp tự động và để đọc lại lý do khi điểm bất thường.</li>
+<li><strong>Có ví dụ biên</strong>: một câu trả lời “gần đạt” và lý do nó không đạt — giúp giám khảo hiểu ranh giới.</li>
+</ol>
+<p>Mẫu rubric chấm faithfulness bằng tiếng Việt dưới đây là điểm khởi đầu; hãy hiệu chỉnh trên dữ liệu của bạn trước khi dùng.</p>
+<pre><code>Bạn là người đánh giá độ trung thực của câu trả lời so với tài liệu nguồn.
+Bạn KHÔNG đánh giá câu trả lời có hay, có đầy đủ hay không; chỉ đánh giá:
+mọi thông tin trong câu trả lời có được tài liệu nguồn hỗ trợ hay không.
+
+&lt;tai_lieu&gt;
+{context}
+&lt;/tai_lieu&gt;
+
+&lt;cau_hoi&gt;
+{question}
+&lt;/cau_hoi&gt;
+
+&lt;cau_tra_loi&gt;
+{answer}
+&lt;/cau_tra_loi&gt;
+
+Hướng dẫn:
+1. Tách câu trả lời thành các nhận định độc lập (mỗi nhận định một ý,
+   giữ nguyên con số, ngày tháng, điều kiện).
+2. Với mỗi nhận định, tìm câu trong tài liệu hỗ trợ nó. Ghi nguyên văn câu đó.
+   Gán nhãn:
+   - "ho_tro": tài liệu nói rõ hoặc suy ra trực tiếp được.
+   - "khong_ho_tro": tài liệu không nhắc tới, hoặc chỉ nói chủ đề chung.
+   - "mau_thuan": tài liệu nói điều ngược lại.
+3. Lưu ý:
+   - Con số, thời hạn, mức phí phải khớp chính xác (có thể khác cách viết:
+     "15 ngày" = "mười lăm ngày"; "1.000.000đ" = "1 triệu đồng").
+   - Câu từ chối như "Tôi không tìm thấy thông tin này" không phải là nhận định;
+     bỏ qua.
+   - Câu dài hơn KHÔNG có nghĩa là tốt hơn.
+   - Không dùng kiến thức bên ngoài tài liệu, kể cả khi bạn biết nhận định đúng.
+4. Kết luận "dat" chỉ khi MỌI nhận định đều là "ho_tro".
+
+Trả lời đúng định dạng JSON:
+{
+  "nhan_dinh": [
+    {"noi_dung": "...", "bang_chung": "... hoặc null", "nhan": "ho_tro|khong_ho_tro|mau_thuan"}
+  ],
+  "ket_luan": "dat|khong_dat",
+  "ly_do": "một câu ngắn"
+}</code></pre>
+<p>Từ đầu ra này có thể tính cả điểm nhị phân (đạt / không đạt) lẫn tỷ lệ nhận định được hỗ trợ (giống faithfulness của RAGAS), và đếm riêng nhận định “mâu thuẫn” — loại lỗi nghiêm trọng nhất.</p>
+
+<h2>Hiệu chỉnh giám khảo với nhãn người</h2>
+<p>Trước khi dùng điểm giám khảo để ra quyết định, cần biết giám khảo sai bao nhiêu và sai theo hướng nào. Quy trình:</p>
+<ol class="steps">
+<li><strong>Lấy mẫu</strong> 100–200 cặp (câu hỏi, ngữ cảnh, câu trả lời) đa dạng, gồm cả câu trả lời tốt và xấu. Số lượng này là ước lượng thực hành để có hình dung ban đầu, không phải chuẩn thống kê.</li>
+<li><strong>Gán nhãn người</strong> theo <em>cùng rubric</em> với giám khảo, tốt nhất hai người độc lập trên một phần chung để đo đồng thuận giữa người.</li>
+<li><strong>Chạy giám khảo</strong> và lập ma trận nhầm lẫn.</li>
+<li><strong>Đọc các ca bất đồng</strong>: lỗi do rubric mơ hồ, do giám khảo, hay do người gán nhãn? Sửa rubric và lặp lại trên một mẫu <em>mới</em> (tránh “học thuộc” mẫu cũ).</li>
+<li><strong>Ghi lại</strong> mức đồng thuận cùng phiên bản giám khảo; hiệu chỉnh lại khi đổi mô hình giám khảo.</li>
+</ol>
+<h3>Ví dụ: đọc ma trận nhầm lẫn</h3>
+<p>100 câu trả lời, người gán 70 câu “trung thực”, 30 câu “không trung thực”. Giám khảo LLM cho kết quả:</p>
+<table>
+<thead><tr><th></th><th>Giám khảo: trung thực</th><th>Giám khảo: không trung thực</th><th>Tổng (người)</th></tr></thead>
+<tbody>
+<tr><td><strong>Người: trung thực</strong></td><td>62</td><td>8</td><td>70</td></tr>
+<tr><td><strong>Người: không trung thực</strong></td><td>10</td><td>20</td><td>30</td></tr>
+<tr><td>Tổng (giám khảo)</td><td>72</td><td>28</td><td>100</td></tr>
+</tbody>
+</table>
+<ul>
+<li><strong>Độ chính xác</strong> (tỷ lệ đồng ý) = (62 + 20) / 100 = 0,82 — nghe có vẻ tốt.</li>
+<li><strong>Cohen’s kappa</strong> (đồng thuận đã trừ phần trùng hợp ngẫu nhiên): đồng ý kỳ vọng ngẫu nhiên = 0,70 × 0,72 + 0,30 × 0,28 = 0,588; κ = (0,82 − 0,588) / (1 − 0,588) ≈ <strong>0,56</strong> — mức trung bình.</li>
+<li><strong>Tỷ lệ bắt được hallucination</strong> = 20 / 30 ≈ <strong>0,67</strong>. Giám khảo bỏ lọt một phần ba số câu trả lời không trung thực. Nếu mục tiêu của bạn là chặn hallucination, đây mới là con số quan trọng, không phải 0,82.</li>
+</ul>
+<p>Các con số trong ví dụ là giả định để minh họa cách đọc. Bài học: luôn nhìn ma trận nhầm lẫn theo <em>lớp lỗi bạn quan tâm</em>, không chỉ độ chính xác tổng.</p>
+
+<h2>Vấn đề riêng với tiếng Việt</h2>
+<div class="callout nhan-dinh">
+<p>Phần lớn bằng chứng về độ tin cậy của LLM-as-a-judge và các framework như RAGAS, ARES được đo trên dữ liệu tiếng Anh. Chúng tôi chưa thấy đủ nghiên cứu công bố để khẳng định mức đồng thuận tương tự cho tiếng Việt; vì vậy coi năng lực tiếng Việt của giám khảo là <em>biến số cần đo</em>. Những điểm chúng tôi cho là đáng kiểm tra trước:</p>
+<ul>
+<li><strong>Cách viết số và đơn vị</strong>: “1.000.000đ”, “1 triệu đồng”, “1tr”; dấu thập phân là dấu phẩy (“4,5%”). Giám khảo có coi là tương đương không, và có nhận ra “4,5%” ≠ “45%” không?</li>
+<li><strong>Phủ định và điều kiện</strong>: “không áp dụng”, “trừ trường hợp”, “chỉ khi” — các từ ngắn đảo nghĩa cả câu.</li>
+<li><strong>Văn bản pháp lý, hành chính</strong>: cấu trúc Điều–Khoản–Điểm, thuật ngữ đặc thù; nhận định “theo Khoản 2 Điều 5” cần khớp đúng vị trí.</li>
+<li><strong>Trộn Anh–Việt</strong>: tài liệu kỹ thuật có thuật ngữ tiếng Anh; câu trả lời dịch sang tiếng Việt có còn được coi là bám nguồn?</li>
+<li><strong>Không dấu</strong>: câu hỏi “phi chuyen tien” có được giám khảo answer relevance hiểu đúng?</li>
+<li><strong>Ngôn ngữ của rubric</strong>: viết rubric bằng tiếng Việt hay tiếng Anh cho dữ liệu tiếng Việt — hãy thử cả hai trên cùng mẫu nhãn người, chọn bản có đồng thuận cao hơn.</li>
+</ul>
+</div>
+<p>Mẫu hiệu chỉnh nên có tỷ lệ đáng kể các ca khó ở trên, không chỉ câu “dễ”. Nếu giám khảo yếu ở nhóm nào, giữ người chấm cho nhóm đó hoặc thêm kiểm tra bằng luật (ví dụ so khớp con số).</p>
+
+<h2>Kiểm thử hồi quy trong CI</h2>
+<p>Hệ thống RAG thay đổi liên tục: sửa prompt, đổi mô hình, cập nhật chỉ mục, nâng phiên bản thư viện. Mỗi thay đổi có thể làm hỏng những câu từng đúng. <strong>Kiểm thử hồi quy</strong> (regression testing) chạy bộ đánh giá tự động mỗi khi có thay đổi và chặn phát hành nếu chất lượng giảm.</p>
+<table>
+<thead><tr><th>Thay đổi</th><th>Chạy gì</th><th>Ghi chú</th></tr></thead>
+<tbody>
+<tr><td>Sửa prompt</td><td>Toàn bộ chỉ số generation + câu không trả lời được</td><td>Prompt nhỏ cũng có thể làm tăng từ chối thừa</td></tr>
+<tr><td>Đổi chunking, embedding, reranker</td><td>Chỉ số retrieval (rẻ, chạy toàn bộ) + generation trên mẫu</td><td>Kiểm tra nhãn còn hợp lệ không</td></tr>
+<tr><td>Đổi hoặc nâng phiên bản LLM sinh</td><td>Toàn bộ, kèm đọc tay một mẫu</td><td>Nhà cung cấp có thể cập nhật mô hình sau cùng một tên gọi; ghim phiên bản khi có thể</td></tr>
+<tr><td>Đổi LLM giám khảo</td><td>Hiệu chỉnh lại với nhãn người trước</td><td>Điểm cũ và mới không so được trực tiếp</td></tr>
+<tr><td>Cập nhật dữ liệu định kỳ</td><td>Bộ “câu phải đúng” (golden set) nhỏ</td><td>Phát hiện tài liệu bị mất, trích xuất hỏng</td></tr>
+</tbody>
+</table>
+<div class="callout kinh-nghiem">
+<p>Một vài thực hành giúp CI đánh giá hữu ích thay vì gây phiền:</p>
+<ul>
+<li><strong>Ngưỡng có dung sai</strong>: đặt ngưỡng chặn theo khoảng tin cậy (xem phần thống kê ở [[link:danh-gia/do-luong-retrieval]]), không chặn vì dao động 1–2 điểm trên 100 câu.</li>
+<li><strong>Bộ “không được sai”</strong>: vài chục câu quan trọng nhất (pháp lý, tài chính, an toàn) chặn phát hành nếu <em>bất kỳ</em> câu nào hỏng — không lấy trung bình.</li>
+<li><strong>Lưu toàn bộ đầu ra</strong> (câu trả lời, lý do của giám khảo) để so sánh khác biệt giữa hai lần chạy, không chỉ lưu điểm.</li>
+<li><strong>Kiểm soát chi phí</strong>: cache kết quả giám khảo cho cặp (câu trả lời, ngữ cảnh) không đổi; chạy bộ đầy đủ hằng đêm, bộ rút gọn cho mỗi thay đổi.</li>
+<li><strong>Tính bất định</strong>: kể cả với nhiệt độ thấp, đầu ra LLM có thể khác nhau giữa các lần gọi. Đo độ dao động bằng cách chạy lặp vài lần trên một mẫu.</li>
+</ul>
+</div>
+
+<h2>Quy trình đánh giá bởi người</h2>
+<p>Đánh giá bởi người vẫn là chuẩn để hiệu chỉnh mọi thứ khác. Để nó đáng tin:</p>
+<ol class="steps">
+<li><strong>Viết hướng dẫn chấm</strong> với định nghĩa từng mức và ví dụ biên — cùng rubric với giám khảo tự động để so sánh được.</li>
+<li><strong>Chấm mù</strong>: người chấm không biết câu trả lời đến từ hệ thống nào; xáo trộn thứ tự khi so cặp.</li>
+<li><strong>Chồng lấn</strong>: một phần mẫu (ví dụ 20–30%) do hai người chấm độc lập để đo đồng thuận; ca bất đồng do người thứ ba hoặc thảo luận phân xử.</li>
+<li><strong>Người chấm có chuyên môn</strong> phù hợp: câu hỏi pháp lý cần người hiểu luật; câu hỏi sản phẩm cần người hiểu sản phẩm. Người chấm phổ thông dễ bị câu trả lời trôi chảy thuyết phục.</li>
+<li><strong>Ghi lại thời gian chấm</strong> và phản hồi tự do — thường chỉ ra lỗi mà rubric không có.</li>
+</ol>
+<p>So sánh cặp (A tốt hơn B?) thường nhất quán hơn chấm điểm tuyệt đối khi đánh giá thay đổi nhỏ; chấm tuyệt đối theo rubric phù hợp hơn khi cần theo dõi chất lượng theo thời gian.</p>
+
+<h2>Lỗi thường gặp</h2>
+<table>
+<thead><tr><th>Lỗi</th><th>Hậu quả</th><th>Cách tránh</th></tr></thead>
+<tbody>
+<tr><td>Một điểm “chất lượng chung” 1–10</td><td>Không biết sửa gì; điểm dồn về giữa</td><td>Tách chiều, thang ngắn có mốc</td></tr>
+<tr><td>Tin giám khảo mà chưa hiệu chỉnh</td><td>Tối ưu theo thiên lệch của giám khảo (ví dụ câu dài hơn)</td><td>Ma trận nhầm lẫn với nhãn người</td></tr>
+<tr><td>Dùng cùng mô hình để sinh và chấm</td><td>Self-enhancement bias</td><td>Giám khảo khác họ hoặc kiểm tra chéo</td></tr>
+<tr><td>Bộ kiểm thử không có câu không trả lời được</td><td>Không phát hiện bịa</td><td>10–20% câu không có đáp án trong kho (điểm khởi đầu)</td></tr>
+<tr><td>Không ghim phiên bản</td><td>Điểm thay đổi mà không rõ vì sao</td><td>Lưu phiên bản mô hình, thư viện, prompt cùng kết quả</td></tr>
+<tr><td>Chỉ nhìn trung bình</td><td>Che mất nhóm câu hỏi yếu</td><td>Báo cáo theo nhóm, đọc mẫu lỗi</td></tr>
+</tbody>
+</table>
+
+<h2>Cách kiểm chứng</h2>
+<div class="callout kiem-chung">
+<ol>
+<li>Lấy 30 câu trả lời, tự chấm faithfulness theo rubric mẫu, rồi chạy giám khảo LLM. Lập ma trận nhầm lẫn và tính tỷ lệ bắt được câu không trung thực.</li>
+<li>Kiểm tra thiên lệch độ dài: lấy một câu trả lời đúng, thêm một đoạn dài vô hại (nhắc lại câu hỏi, lời chào) — điểm có tăng không? Thêm một nhận định bịa vào giữa đoạn dài — giám khảo có phát hiện không?</li>
+<li>Nếu dùng so sánh cặp, đổi chỗ A và B: tỷ lệ kết luận đảo ngược là bao nhiêu?</li>
+<li>Chạy cùng bộ đánh giá hai lần không đổi gì: chỉ số dao động bao nhiêu? Đó là mức “nhiễu nền” — mọi cải tiến nhỏ hơn mức này đều chưa đáng tin.</li>
+</ol>
+</div>
+
+<h2>Đọc tiếp</h2>
+<ul>
+<li>Bài tiếp theo: [[link:danh-gia/chan-doan-loi]] — kết hợp số đo retrieval và generation để tìm nguyên nhân lỗi.</li>
+<li>Đo phần truy hồi: [[link:danh-gia/do-luong-retrieval]].</li>
+<li>Thiết kế để câu trả lời kiểm chứng được ngay từ đầu: [[link:sinh/trich-dan-grounding]] và [[link:sinh/xay-dung-context]].</li>
+<li>Danh sách kiểm tra trước khi phát hành: [[link:thuc-hanh/checklist-trien-khai]].</li>
+<li>Nên đọc: RAGAS[[cite:es2023ragas]], ARES[[cite:saadfalcon2023ares]], và bài của Zheng et al.[[cite:zheng2023judge]] để hiểu cả sức mạnh lẫn giới hạn của LLM-as-a-judge.</li>
+</ul>

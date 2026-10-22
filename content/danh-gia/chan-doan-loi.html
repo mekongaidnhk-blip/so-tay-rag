@@ -1,0 +1,228 @@
+---
+{
+  "title": "Chẩn đoán lỗi RAG: câu trả lời sai do dữ liệu, truy hồi hay sinh?",
+  "navTitle": "Chẩn đoán lỗi",
+  "description": "Bảy điểm lỗi của hệ thống RAG gắn với từng khâu pipeline, cây quyết định chẩn đoán, bảng triệu chứng – nguyên nhân – cách sửa, quy trình phân tích lỗi theo tần suất và những gì cần ghi log để truy vết.",
+  "lead": "Khi người dùng báo “bot trả lời sai”, phản xạ thường gặp là sửa prompt hoặc đổi mô hình. Nhưng lỗi có thể nằm ở bất kỳ khâu nào từ dữ liệu tới định dạng câu trả lời. Bài này đưa ra một quy trình có hệ thống: đi lần lượt qua năm câu hỏi để định vị lỗi, phân loại và đếm lỗi trên một mẫu, rồi sửa theo thứ tự ưu tiên — với log đủ chi tiết để làm được việc đó.",
+  "level": "Trung cấp",
+  "reviewed": "2026-10-22",
+  "kinds": ["nen-tang", "nghien-cuu", "kinh-nghiem", "nhan-dinh"]
+}
+---
+<div class="callout tom-tat">
+<ul>
+<li>Một câu trả lời sai có thể đến từ bảy điểm lỗi, trải từ <strong>thiếu nội dung trong kho</strong> tới <strong>câu trả lời thiếu ý</strong>. Ba điểm đầu nằm <em>trước</em> bước sinh — và theo kinh nghiệm, đó thường là nơi tập trung nhiều lỗi nhất.</li>
+<li>Chẩn đoán bằng năm câu hỏi theo thứ tự pipeline: đáp án có trong kho? → có trong top-N ứng viên? → còn trong ngữ cảnh cuối? → mô hình có dùng đúng? → câu trả lời có đúng định dạng, đủ ý?</li>
+<li>Phân tích lỗi là việc <em>đếm</em>: lấy mẫu lỗi, gán một nhóm nguyên nhân chính cho mỗi lỗi, sửa nhóm phổ biến và nghiêm trọng nhất trước.</li>
+<li>Không có log thì không chẩn đoán được: ghi truy vấn gốc, truy vấn đã viết lại, mã và điểm tài liệu ở từng giai đoạn, prompt cuối, câu trả lời, phiên bản mọi thành phần.</li>
+</ul>
+</div>
+
+<h2>Vì sao cần quy trình chẩn đoán</h2>
+<p>Hãy hình dung trợ lý nội bộ của một công ty trả lời sai câu “Nhân viên được hỗ trợ bao nhiêu tiền gửi xe mỗi tháng?”. Có ít nhất sáu giả thuyết: quy định chưa được đưa vào kho; có nhưng bị trích xuất hỏng từ PDF; có nhưng truy hồi không tìm thấy vì tài liệu dùng chữ “phụ cấp đi lại”; tìm thấy nhưng bị loại khi cắt top-k; nằm trong ngữ cảnh nhưng mô hình lấy nhầm con số của phụ cấp ăn trưa; hoặc câu trả lời đúng nhưng thiếu điều kiện “áp dụng cho nhân viên chính thức”.</p>
+<p>Sửa prompt chỉ có tác dụng với một hoặc hai giả thuyết trong số đó. Đổi sang LLM mạnh hơn cũng vậy. Nếu không định vị được lỗi, bạn có thể tốn nhiều tuần tối ưu một khâu không phải điểm nghẽn — và có khi làm hỏng các câu đang đúng.</p>
+
+<h2>Bảy điểm lỗi theo từng khâu</h2>
+<div class="callout nghien-cuu">
+<p>Barnett và cộng sự (CAIN 2024) rút kinh nghiệm từ ba hệ thống RAG thực tế — một công cụ hỗ trợ tổng quan tài liệu khoa học, một trợ giảng AI trong môi trường đại học, và một hệ thống hỏi đáp y sinh trên dữ liệu BioASQ — và đề xuất bảy điểm lỗi (failure point, FP). Họ cũng nhấn mạnh rằng việc kiểm chứng một hệ thống RAG chỉ thực sự khả thi khi nó vận hành, và độ bền vững “tiến hóa dần” chứ không thể thiết kế sẵn từ đầu[[cite:barnett2024]]. Đây là bài học từ case study, không phải thống kê tần suất trên nhiều hệ thống; danh sách hữu ích như một khung phân loại, không phải bảng xếp hạng mức phổ biến.</p>
+</div>
+<table>
+<thead><tr><th>Điểm lỗi</th><th>Khâu</th><th>Mô tả</th><th>Ví dụ tiếng Việt</th></tr></thead>
+<tbody>
+<tr><td>FP1 · Missing content (thiếu nội dung)</td><td>Dữ liệu</td><td>Câu hỏi không trả lời được từ kho, nhưng hệ thống vẫn đưa ra câu trả lời thay vì nói không biết</td><td>Hỏi chính sách làm việc từ xa, công ty chưa ban hành; bot “trả lời” theo thông lệ chung</td></tr>
+<tr><td>FP2 · Missed the top ranked documents</td><td>Truy hồi</td><td>Đáp án có trong kho nhưng tài liệu không lọt vào top-K được trả về</td><td>Tài liệu ghi “máy rút tiền tự động”, người hỏi gõ “cây ATM”; tài liệu đúng ở hạng 40</td></tr>
+<tr><td>FP3 · Not in context (giới hạn khâu hợp nhất)</td><td>Rerank / ghép ngữ cảnh</td><td>Tài liệu được truy hồi nhưng bị loại khi hợp nhất, cắt ngữ cảnh</td><td>Đoạn đúng ở hạng 9 sau rerank, nhưng chỉ 5 đoạn được đưa vào prompt</td></tr>
+<tr><td>FP4 · Not extracted</td><td>Sinh</td><td>Đáp án nằm trong ngữ cảnh nhưng mô hình không rút ra được, thường do nhiễu hoặc thông tin mâu thuẫn</td><td>Ngữ cảnh có biểu phí 2025 và 2026; mô hình lấy con số năm 2025</td></tr>
+<tr><td>FP5 · Wrong format</td><td>Sinh</td><td>Mô hình bỏ qua định dạng được yêu cầu (bảng, danh sách…)</td><td>Yêu cầu danh sách giấy tờ dạng gạch đầu dòng, nhận về một đoạn văn dài</td></tr>
+<tr><td>FP6 · Incorrect specificity</td><td>Sinh / truy vấn</td><td>Câu trả lời quá chung hoặc quá chi tiết so với nhu cầu; có thể do câu hỏi mơ hồ</td><td>Hỏi “lãi suất bao nhiêu?”, nhận về toàn bộ bảng lãi suất 12 kỳ hạn</td></tr>
+<tr><td>FP7 · Incomplete</td><td>Sinh (và ghép ngữ cảnh)</td><td>Câu trả lời không sai nhưng thiếu thông tin có trong ngữ cảnh</td><td>Liệt kê 4 trên 6 loại giấy tờ hồ sơ; 2 loại còn lại nằm ở đoạn tiếp theo</td></tr>
+</tbody>
+</table>
+
+<h2>Cây quyết định chẩn đoán</h2>
+<div class="callout nen-tang">
+<p><strong>Nguyên tắc nền:</strong> dữ liệu trong pipeline RAG chảy một chiều — kho tài liệu → ứng viên truy hồi → ngữ cảnh cuối → câu trả lời. Một khâu không thể dùng thông tin mà khâu trước nó đã làm mất. Vì vậy chẩn đoán đi <em>theo chiều dòng chảy</em>, và chỉ số của khâu sau luôn bị chặn trên bởi khâu trước: nếu Recall@N của truy hồi là 0,6, không prompt nào đưa độ đúng lên trên mức đó một cách bền vững (trừ khi mô hình trả lời từ trí nhớ — và đó lại là một lỗi khác).</p>
+</div>
+<p>Với mỗi câu trả lời sai, đi lần lượt qua năm câu hỏi theo đúng thứ tự dữ liệu chảy trong pipeline. Dừng ở câu đầu tiên có câu trả lời “Không” — đó là khâu cần sửa trước. Sửa khâu sau khi khâu trước còn hỏng thường vô ích.</p>
+<figure class="diagram">
+<svg viewBox="0 0 760 560" width="760" role="img" aria-labelledby="cd1t cd1d">
+<title id="cd1t">Cây quyết định chẩn đoán lỗi RAG</title>
+<desc id="cd1d">Năm câu hỏi theo thứ tự. Một: đáp án có trong kho tài liệu không; nếu không, lỗi thiếu nội dung FP1. Hai: tài liệu đúng có trong top-N ứng viên không; nếu không, lỗi truy hồi FP2. Ba: tài liệu đúng còn trong ngữ cảnh cuối sau rerank và cắt không; nếu không, lỗi hợp nhất ngữ cảnh FP3. Bốn: mô hình có dùng đúng thông tin không; nếu không, lỗi sinh FP4. Năm: câu trả lời có đúng định dạng, đủ ý, đúng độ chi tiết không; nếu không, FP5, FP6, FP7. Nếu tất cả đều có, kiểm tra lại nhãn hoặc câu hỏi mơ hồ.</desc>
+<defs><marker id="cd-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="arrowhead"/></marker></defs>
+<rect x="20" y="16" width="330" height="56" rx="8" class="box-b"/>
+<text x="185" y="40" font-size="14" text-anchor="middle" font-weight="700">1. Đáp án có trong kho tài liệu?</text>
+<text x="185" y="59" font-size="11.5" text-anchor="middle" class="muted">tìm chuỗi đáp án, hỏi chuyên gia nội dung</text>
+<rect x="430" y="16" width="310" height="56" rx="8" class="box-w"/>
+<text x="585" y="40" font-size="13.5" text-anchor="middle" font-weight="700">FP1 · Thiếu nội dung</text>
+<text x="585" y="59" font-size="11.5" text-anchor="middle">bổ sung dữ liệu, sửa trích xuất; dạy từ chối</text>
+<rect x="20" y="118" width="330" height="56" rx="8" class="box-b"/>
+<text x="185" y="142" font-size="14" text-anchor="middle" font-weight="700">2. Tài liệu đúng nằm trong top-N?</text>
+<text x="185" y="161" font-size="11.5" text-anchor="middle" class="muted">N = số ứng viên trước rerank (vd. 50–100)</text>
+<rect x="430" y="118" width="310" height="56" rx="8" class="box-w"/>
+<text x="585" y="142" font-size="13.5" text-anchor="middle" font-weight="700">FP2 · Truy hồi bỏ sót</text>
+<text x="585" y="161" font-size="11.5" text-anchor="middle">truy vấn, hybrid, embedding, chunking</text>
+<rect x="20" y="220" width="330" height="56" rx="8" class="box-b"/>
+<text x="185" y="244" font-size="14" text-anchor="middle" font-weight="700">3. Còn trong ngữ cảnh cuối?</text>
+<text x="185" y="263" font-size="11.5" text-anchor="middle" class="muted">sau rerank, lọc, cắt ngân sách token</text>
+<rect x="430" y="220" width="310" height="56" rx="8" class="box-w"/>
+<text x="585" y="244" font-size="13.5" text-anchor="middle" font-weight="700">FP3 · Rơi khỏi ngữ cảnh</text>
+<text x="585" y="263" font-size="11.5" text-anchor="middle">reranker, k, ngưỡng, khử trùng lặp</text>
+<rect x="20" y="322" width="330" height="56" rx="8" class="box-b"/>
+<text x="185" y="346" font-size="14" text-anchor="middle" font-weight="700">4. Mô hình dùng đúng thông tin?</text>
+<text x="185" y="365" font-size="11.5" text-anchor="middle" class="muted">so câu trả lời với đoạn đúng; thử ngữ cảnh “oracle”</text>
+<rect x="430" y="322" width="310" height="56" rx="8" class="box-w"/>
+<text x="585" y="346" font-size="13.5" text-anchor="middle" font-weight="700">FP4 · Không rút ra được</text>
+<text x="585" y="365" font-size="11.5" text-anchor="middle">thứ tự, nhiễu, mâu thuẫn, prompt</text>
+<rect x="20" y="424" width="330" height="56" rx="8" class="box-b"/>
+<text x="185" y="448" font-size="14" text-anchor="middle" font-weight="700">5. Đúng định dạng, đủ ý, vừa mức?</text>
+<text x="185" y="467" font-size="11.5" text-anchor="middle" class="muted">rubric completeness, kiểm tra định dạng</text>
+<rect x="430" y="424" width="310" height="56" rx="8" class="box-w"/>
+<text x="585" y="448" font-size="13.5" text-anchor="middle" font-weight="700">FP5 / FP6 / FP7</text>
+<text x="585" y="467" font-size="11.5" text-anchor="middle">định dạng, độ chi tiết, thiếu ý</text>
+<rect x="20" y="510" width="330" height="40" rx="8" class="box-v"/>
+<text x="185" y="535" font-size="12.5" text-anchor="middle">Mọi câu đều “Có” → xem lại nhãn, câu hỏi mơ hồ</text>
+<path d="M350 44H428M350 146H428M350 248H428M350 350H428M350 452H428" class="ln-a" marker-end="url(#cd-ah)"/>
+<text x="389" y="38" font-size="11.5" text-anchor="middle" class="muted">Không</text>
+<text x="389" y="140" font-size="11.5" text-anchor="middle" class="muted">Không</text>
+<text x="389" y="242" font-size="11.5" text-anchor="middle" class="muted">Không</text>
+<text x="389" y="344" font-size="11.5" text-anchor="middle" class="muted">Không</text>
+<text x="389" y="446" font-size="11.5" text-anchor="middle" class="muted">Không</text>
+<path d="M185 72V116M185 174V218M185 276V320M185 378V422M185 480V508" class="ln" marker-end="url(#cd-ah)"/>
+<text x="196" y="99" font-size="11.5" class="muted">Có</text>
+<text x="196" y="201" font-size="11.5" class="muted">Có</text>
+<text x="196" y="303" font-size="11.5" class="muted">Có</text>
+<text x="196" y="405" font-size="11.5" class="muted">Có</text>
+<text x="196" y="499" font-size="11.5" class="muted">Có</text>
+</svg>
+<figcaption>Đi từ trên xuống, dừng ở câu “Không” đầu tiên. Mỗi ô bên phải ứng với một hoặc nhiều điểm lỗi của Barnett et al. và chỉ tới khâu cần sửa.</figcaption>
+</figure>
+
+<h3>Trả lời từng câu hỏi trong thực tế</h3>
+<ol class="steps">
+<li><strong>Đáp án có trong kho?</strong> Tìm trực tiếp chuỗi đáp án (hoặc từ khóa đặc trưng) trong <em>văn bản đã trích xuất</em>, không chỉ trong file gốc — PDF có thể chứa đáp án trong một bảng mà bước trích xuất đã làm vỡ (xem [[link:du-lieu/thu-thap-lam-sach]]). Nếu không chắc, hỏi người phụ trách nội dung.</li>
+<li><strong>Trong top-N ứng viên?</strong> Xem log hạng của tài liệu đúng ở từng nhánh (BM25, vector, sau hợp nhất). Nếu đúng ở nhánh này mà mất ở nhánh kia, đó là dấu hiệu cần [[link:tim-kiem/hybrid-search|hybrid search]] hoặc chỉnh trọng số. Nếu mất ở mọi nhánh, xem lại [[link:tim-kiem/xu-ly-truy-van|cách viết lại truy vấn]], [[link:truy-hoi/embedding|mô hình embedding]] và [[link:du-lieu/chunking|cách chunking]].</li>
+<li><strong>Còn trong ngữ cảnh cuối?</strong> So danh sách sau rerank với danh sách thật sự nằm trong prompt. Lỗi thường do k quá nhỏ, ngưỡng quá chặt, khử trùng lặp xóa nhầm, hoặc [[link:tim-kiem/reranking|reranker]] kém ở miền dữ liệu của bạn.</li>
+<li><strong>Mô hình dùng đúng?</strong> Một phép thử hữu ích là <strong>ngữ cảnh oracle</strong>: chỉ đưa đoạn đúng vào prompt. Nếu mô hình vẫn sai, lỗi nằm ở prompt hoặc năng lực mô hình; nếu đúng, lỗi do nhiễu hoặc vị trí trong ngữ cảnh đầy đủ. “Lost in the Middle” dùng chính thiết lập oracle này làm mốc so sánh, và ghi nhận ngữ cảnh nhiều đoạn có thể kéo độ chính xác xuống rất xa so với oracle[[cite:liu2023lost]]. Xem [[link:sinh/xay-dung-context]].</li>
+<li><strong>Đúng định dạng, đủ ý?</strong> Chấm theo rubric completeness và kiểm tra định dạng bằng luật (xem [[link:danh-gia/danh-gia-generation]]). FP6 thường bắt nguồn từ câu hỏi mơ hồ — đôi khi cách sửa đúng là hỏi lại người dùng.</li>
+</ol>
+
+<h2>Bảng triệu chứng – nguyên nhân – cách sửa</h2>
+<table>
+<thead><tr><th>Triệu chứng</th><th>Nguyên nhân có khả năng</th><th>Cách kiểm tra</th><th>Hướng sửa</th></tr></thead>
+<tbody>
+<tr><td>Trả lời tự tin cho câu không có trong tài liệu</td><td>FP1; prompt không có lối thoát “không biết”</td><td>Bộ câu không trả lời được; tỷ lệ bịa</td><td>Câu từ chối cố định trong prompt; ngưỡng điểm truy hồi; bổ sung nội dung (xem [[link:sinh/trich-dan-grounding]])</td></tr>
+<tr><td>Sai với câu hỏi dùng từ đồng nghĩa, viết tắt, không dấu</td><td>FP2: lệch từ vựng</td><td>Hạng của tài liệu đúng ở nhánh BM25 và vector</td><td>Hybrid search, mở rộng truy vấn, từ điển đồng nghĩa nghiệp vụ</td></tr>
+<tr><td>Sai với câu hỏi chứa mã, số hiệu (“Thông tư 39”, mã sản phẩm)</td><td>FP2: embedding kém với chuỗi chính xác</td><td>So kết quả BM25 với vector</td><td>Tăng trọng số BM25, lọc metadata theo mã</td></tr>
+<tr><td>Đúng khi hỏi riêng từng ý, sai khi hỏi gộp</td><td>FP2/FP7: một truy vấn không phủ hết các ý</td><td>Recall@k theo từng ý</td><td>Tách truy vấn (query decomposition), tăng k cho câu tổng hợp</td></tr>
+<tr><td>Thiếu một phần danh sách, bảng</td><td>FP3/FP7: chunk cắt giữa bảng; chỉ một nửa vào ngữ cảnh</td><td>Xem ranh giới chunk của tài liệu đúng</td><td>Chunking theo cấu trúc, gộp chunk kề nhau</td></tr>
+<tr><td>Dùng số liệu cũ</td><td>FP4: nhiều phiên bản trong ngữ cảnh, không có ngày</td><td>Metadata hiệu lực của các đoạn trong prompt</td><td>Lọc theo hiệu lực khi truy hồi; ngày trong thẻ tài liệu</td></tr>
+<tr><td>Lấy nhầm con số của đối tượng khác</td><td>FP4: đoạn gây nhiễu “gần đúng”</td><td>Thử ngữ cảnh oracle</td><td>Lọc metadata, giảm k, hiển thị phạm vi tài liệu</td></tr>
+<tr><td>Trả lời theo “kiến thức chung” thay vì quy định riêng</td><td>FP4: xung đột ngữ cảnh – trí nhớ mô hình</td><td>Đổi con số trong tài liệu, xem câu trả lời có đổi theo</td><td>Quy tắc “chỉ dùng tài liệu”; trích nguyên văn con số</td></tr>
+<tr><td>Đúng nội dung nhưng sai định dạng, quá dài</td><td>FP5/FP6</td><td>Kiểm tra định dạng bằng luật</td><td>Ví dụ mẫu trong prompt, giới hạn độ dài, đầu ra có cấu trúc</td></tr>
+<tr><td>Chất lượng giảm đột ngột không rõ lý do</td><td>Thay đổi phiên bản mô hình, chỉ mục, hoặc pipeline trích xuất</td><td>So log phiên bản giữa trước và sau</td><td>Ghim phiên bản; kiểm thử hồi quy trong CI</td></tr>
+<tr><td>Đúng trên bộ kiểm thử, sai với người dùng thật</td><td>Bộ kiểm thử không đại diện (câu sinh tự động, quá “sạch”)</td><td>So chỉ số theo nguồn câu hỏi</td><td>Đưa truy vấn thật vào bộ kiểm thử (xem [[link:danh-gia/do-luong-retrieval]])</td></tr>
+</tbody>
+</table>
+
+<h2>Quy trình phân tích lỗi</h2>
+<p>Đọc từng lỗi một là cần thiết nhưng chưa đủ. <strong>Error analysis</strong> (phân tích lỗi) biến các quan sát rời rạc thành số liệu để ưu tiên:</p>
+<ol class="steps">
+<li><strong>Lấy mẫu lỗi</strong>: 50–100 trường hợp sai từ bộ kiểm thử và từ tín hiệu thực tế (phản hồi tiêu cực, hỏi lại, chuyển nhân viên). Lấy mẫu ngẫu nhiên trong các ca lỗi, không chọn ca “thú vị”.</li>
+<li><strong>Truy vết từng ca</strong> qua cây quyết định ở trên, dùng log.</li>
+<li><strong>Gán một nhóm nguyên nhân chính</strong> cho mỗi ca (có thể ghi thêm nhóm phụ). Bắt đầu từ bảy điểm lỗi, nhưng để ngỏ nhóm mới nếu dữ liệu đòi hỏi — ví dụ “trích xuất PDF hỏng”, “câu hỏi ngoài phạm vi”, “nhãn sai”.</li>
+<li><strong>Đếm và ưu tiên</strong> theo tần suất × mức nghiêm trọng × chi phí sửa.</li>
+<li><strong>Sửa một nhóm</strong>, thêm các ca đó vào bộ kiểm thử hồi quy, đo lại toàn bộ — kể cả các câu đang đúng.</li>
+<li><strong>Lặp lại</strong> định kỳ: phân bố lỗi thay đổi sau mỗi lần sửa.</li>
+</ol>
+<p>Ví dụ kết quả đếm (số liệu giả định để minh họa cách trình bày) cho 80 lỗi của một trợ lý chăm sóc khách hàng:</p>
+<table>
+<thead><tr><th>Nhóm nguyên nhân</th><th>Số ca</th><th>Tỷ lệ</th><th>Mức nghiêm trọng</th><th>Ưu tiên</th></tr></thead>
+<tbody>
+<tr><td>FP2 · Lệch từ vựng (không dấu, viết tắt)</td><td>26</td><td>32,5%</td><td>Trung bình</td><td>1 — phổ biến, sửa được bằng hybrid</td></tr>
+<tr><td>FP1 · Thiếu nội dung</td><td>18</td><td>22,5%</td><td>Cao khi bot bịa</td><td>2 — chuyển danh sách cho đội nội dung; siết từ chối</td></tr>
+<tr><td>FP4 · Dùng phiên bản cũ</td><td>12</td><td>15%</td><td>Cao (sai giá, sai phí)</td><td>2 — lọc theo hiệu lực</td></tr>
+<tr><td>FP3/FP7 · Bảng bị cắt</td><td>10</td><td>12,5%</td><td>Trung bình</td><td>3</td></tr>
+<tr><td>FP6 · Câu hỏi mơ hồ</td><td>8</td><td>10%</td><td>Thấp</td><td>4 — hỏi lại người dùng</td></tr>
+<tr><td>Nhãn sai trong bộ kiểm thử</td><td>6</td><td>7,5%</td><td>—</td><td>Sửa nhãn ngay</td></tr>
+</tbody>
+</table>
+<div class="callout kinh-nghiem">
+<p>Hai bài học thường gặp khi làm phân tích lỗi lần đầu: (1) một tỷ lệ không nhỏ “lỗi” hóa ra là <em>nhãn sai</em> hoặc câu hỏi không có đáp án rõ ràng — bộ kiểm thử cũng cần được gỡ lỗi; (2) nhóm lỗi lớn nhất thường không nằm ở khâu sinh. Đây là quan sát thực hành, không phải thống kê: khung của Barnett và cộng sự chỉ liệt kê điểm lỗi (ba trong bảy điểm, FP1–FP3, nằm ở dữ liệu, truy hồi và hợp nhất ngữ cảnh), không đo tần suất của chúng[[cite:barnett2024]].</p>
+</div>
+<div class="callout nhan-dinh">
+<p>Chúng tôi cho rằng phân tích lỗi thủ công trên vài chục ca là hoạt động có tỷ suất lợi ích cao nhất trong vòng đời một hệ thống RAG, và thường bị bỏ qua vì nó không “trông” như kỹ thuật. Một buổi chiều đọc 50 ca lỗi thường cho nhiều định hướng hơn một tuần thử các kỹ thuật nâng cao. Đây là nhận định từ thực hành, không phải kết quả đo lường.</p>
+</div>
+<div class="callout canh-bao">
+<p>Sửa từng nhóm một và đo lại. Thay đổi đồng thời chunking, embedding và prompt rồi thấy điểm tăng, bạn sẽ không biết thay đổi nào có tác dụng — và thay đổi nào âm thầm làm hỏng một nhóm câu khác.</p>
+</div>
+
+<h2>Ghi log những gì</h2>
+<p>Cây quyết định chỉ dùng được nếu với mỗi truy vấn bạn dựng lại được toàn bộ những gì đã xảy ra. Các trường tối thiểu:</p>
+<table>
+<thead><tr><th>Nhóm</th><th>Trường</th><th>Dùng để trả lời</th></tr></thead>
+<tbody>
+<tr><td>Định danh</td><td>request_id, thời điểm, phiên hội thoại, người dùng (đã ẩn danh), quyền truy cập áp dụng</td><td>Nối với phản hồi; kiểm tra lọc quyền</td></tr>
+<tr><td>Truy vấn</td><td>Câu hỏi gốc; các truy vấn đã viết lại / tách nhỏ; bộ lọc metadata đã áp dụng</td><td>Lỗi do xử lý truy vấn?</td></tr>
+<tr><td>Truy hồi</td><td>Mã chunk và điểm ở từng nhánh (BM25, vector), sau hợp nhất, sau rerank</td><td>Câu hỏi 2 và 3 của cây quyết định</td></tr>
+<tr><td>Ngữ cảnh</td><td>Danh sách mã chunk thật sự trong prompt, thứ tự, số token</td><td>Câu hỏi 3; chi phí</td></tr>
+<tr><td>Sinh</td><td>Phiên bản prompt template, tên và phiên bản mô hình, tham số; câu trả lời; trích dẫn</td><td>Câu hỏi 4 và 5; tái hiện lỗi</td></tr>
+<tr><td>Kiểm tra</td><td>Kết quả kiểm tra trích dẫn, faithfulness trực tuyến (nếu có)</td><td>Lỗi bị chặn hay lọt?</td></tr>
+<tr><td>Phiên bản</td><td>Phiên bản chỉ mục, mô hình embedding, reranker, pipeline trích xuất</td><td>Chất lượng giảm sau thay đổi nào?</td></tr>
+<tr><td>Hiệu năng &amp; phản hồi</td><td>Độ trễ từng bước; phản hồi người dùng; có chuyển nhân viên</td><td>Xem [[link:van-hanh/chi-phi-do-tre]]; chọn mẫu lỗi</td></tr>
+</tbody>
+</table>
+<p>Một bản ghi ví dụ (rút gọn):</p>
+<pre><code>{
+  "request_id": "req_2026-10-21_000731",
+  "ts": "2026-10-21T09:14:03+07:00",
+  "user": "u_7f3a (ẩn danh)", "acl_groups": ["nhan-vien"],
+  "query": "phi rut tien cay atm ngan hang khac",
+  "rewritten": ["phí rút tiền tại máy ATM của ngân hàng khác"],
+  "filters": {"is_current": true, "product": "the-ghi-no"},
+  "retrieval": {
+    "bm25":   [["bieu-phi-2026#c14", 12.8], ["faq-the#c03", 9.1]],
+    "vector": [["faq-the#c03", 0.82], ["bieu-phi-2026#c15", 0.79]],
+    "fused":  ["faq-the#c03", "bieu-phi-2026#c14", "bieu-phi-2026#c15"],
+    "rerank": [["bieu-phi-2026#c14", 0.91], ["bieu-phi-2026#c15", 0.64], ["faq-the#c03", 0.22]]
+  },
+  "context": {"ids": ["bieu-phi-2026#c14", "bieu-phi-2026#c15"], "tokens": 812},
+  "generation": {"prompt_version": "qa-v7", "model": "&lt;tên-mô-hình&gt;@&lt;phiên-bản&gt;",
+                 "temperature": 0.1, "answer": "…", "citations": ["D1"]},
+  "checks": {"citation_ids_valid": true, "faithful": "dat"},
+  "versions": {"index": "2026-10-20", "embedder": "&lt;mô-hình-embedding&gt;", "reranker": "&lt;reranker&gt;"},
+  "latency_ms": {"rewrite": 180, "retrieve": 95, "rerank": 140, "generate": 1650},
+  "feedback": null
+}</code></pre>
+<div class="callout canh-bao">
+<p>Log RAG chứa câu hỏi của người dùng và trích đoạn tài liệu nội bộ — đều có thể là dữ liệu nhạy cảm. Ẩn danh định danh người dùng, che thông tin cá nhân trong câu hỏi khi có thể, giới hạn quyền xem log theo đúng quyền xem tài liệu gốc, và đặt thời hạn lưu trữ. Xem [[link:van-hanh/bao-mat]].</p>
+</div>
+
+<h2>Ba ca chẩn đoán</h2>
+<details class="qa"><summary>Ca 1 — “Phí rút tiền cây ATM ngân hàng khác” trả lời sai</summary>
+<p><strong>Truy vết:</strong> Đáp án có trong biểu phí 2026 (câu 1: Có). Log cho thấy chunk đúng đứng hạng 1 ở nhánh BM25 sau khi viết lại truy vấn có dấu, nhưng ở cấu hình cũ chỉ dùng vector, nó ở hạng 38 — ngoài top-20 ứng viên (câu 2: Không). Câu hỏi gõ không dấu và dùng “cây ATM” trong khi tài liệu ghi “máy rút tiền tự động (ATM)”.</p>
+<p><strong>Phân loại:</strong> FP2. <strong>Sửa:</strong> bật hybrid search, thêm bước khôi phục dấu / viết lại truy vấn, bổ sung “cây ATM” vào từ điển đồng nghĩa. <strong>Đo lại:</strong> Recall@20 trên nhóm câu không dấu, và toàn bộ bộ kiểm thử để chắc không hỏng nhóm khác.</p></details>
+<details class="qa"><summary>Ca 2 — Hồ sơ đăng ký thiếu hai loại giấy tờ</summary>
+<p><strong>Truy vết:</strong> Danh sách sáu loại giấy tờ nằm trong một bảng bị cắt thành hai chunk liên tiếp. Cả hai lọt top-10 sau rerank (câu 2: Có), nhưng chunk thứ hai ở hạng 7 trong khi prompt chỉ lấy 5 đoạn (câu 3: Không). Câu trả lời liệt kê bốn loại — không sai, nhưng thiếu.</p>
+<p><strong>Phân loại:</strong> FP3 dẫn tới FP7. <strong>Sửa:</strong> chunking theo cấu trúc để không cắt giữa bảng, hoặc gộp chunk kề nhau khi ghép ngữ cảnh (xem [[link:sinh/xay-dung-context]]). Tăng k chỉ là giải pháp tạm và làm tăng chi phí.</p></details>
+<details class="qa"><summary>Ca 3 — Trả lời theo “kiến thức chung” thay vì quy định công ty</summary>
+<p><strong>Truy vết:</strong> Quy chế phúc lợi của công ty cho nhân viên thêm ngày nghỉ ngoài mức tối thiểu theo luật. Đoạn quy chế nằm ở vị trí đầu ngữ cảnh (câu 3: Có). Câu trả lời lại nêu mức phổ biến — con số mô hình “nhớ” từ dữ liệu huấn luyện. Thử sửa con số trong tài liệu thành một giá trị khác: câu trả lời không đổi (câu 4: Không).</p>
+<p><strong>Phân loại:</strong> FP4, dạng xung đột giữa ngữ cảnh và trí nhớ mô hình[[cite:xu2024conflict]]. <strong>Sửa:</strong> nhấn mạnh quy tắc “chỉ dùng tài liệu, kể cả khi khác với hiểu biết chung”, yêu cầu trích nguyên văn con số, và thêm các câu loại này vào bộ kiểm thử faithfulness (xem [[link:danh-gia/danh-gia-generation]]).</p></details>
+
+<h2>Cách kiểm chứng</h2>
+<div class="callout kiem-chung">
+<ol>
+<li>Chọn ngẫu nhiên 20 câu trả lời sai gần nhất. Với log hiện có, bạn trả lời được bao nhiêu câu trong năm câu hỏi của cây quyết định? Câu nào không trả lời được cho biết log đang thiếu trường gì.</li>
+<li>Phân loại 20 ca đó theo bảy điểm lỗi. Nhóm lớn nhất có nằm ở khâu bạn đang định tối ưu không?</li>
+<li>Với các ca FP4, chạy thử ngữ cảnh oracle. Bao nhiêu ca được sửa chỉ bằng việc bỏ nhiễu?</li>
+<li>Sau khi sửa một nhóm, chạy lại toàn bộ bộ kiểm thử: số câu đúng trước đây giờ sai là bao nhiêu?</li>
+</ol>
+</div>
+
+<h2>Đọc tiếp</h2>
+<ul>
+<li>Bài tiếp theo: [[link:van-hanh/chi-phi-do-tre]] — đưa hệ thống đã được chẩn đoán vào vận hành với ngân sách độ trễ và chi phí.</li>
+<li>Các số đo dùng trong cây quyết định: [[link:danh-gia/do-luong-retrieval]] và [[link:danh-gia/danh-gia-generation]].</li>
+<li>Khi lỗi FP7 đến từ câu hỏi cần nhiều bước truy hồi: [[link:nang-cao/agentic-graphrag]].</li>
+<li>Danh sách kiểm tra trước khi phát hành, gồm cả log và giám sát: [[link:thuc-hanh/checklist-trien-khai]].</li>
+<li>Bài báo gốc nên đọc: Seven Failure Points[[cite:barnett2024]].</li>
+</ul>

@@ -1,0 +1,194 @@
+---
+{
+  "title": "Metadata và biểu diễn tài liệu: giúp chunk “biết mình là ai”",
+  "navTitle": "Metadata & biểu diễn",
+  "description": "Các trường metadata nên có, lọc theo metadata, tiêu đề ngữ cảnh cho chunk, Contextual Retrieval, proposition, tóm tắt phân cấp RAPTOR, đa biểu diễn (tóm tắt, câu hỏi giả định) và cách biểu diễn bảng, hình ảnh.",
+  "lead": "Một chunk viết “Mức phí là 4% số tiền giao dịch, tối thiểu 100.000 đồng” đúng từng chữ nhưng vô dụng nếu không ai biết đó là phí gì, của thẻ nào, áp dụng từ bao giờ. Metadata và cách biểu diễn tài liệu là những công cụ trả lại ngữ cảnh đó cho chunk — để truy hồi tìm đúng, lọc đúng và trích dẫn đúng.",
+  "level": "Trung cấp",
+  "reviewed": "2026-10-22",
+  "kinds": ["nen-tang", "nghien-cuu", "kinh-nghiem", "nhan-dinh"]
+}
+---
+<div class="callout tom-tat">
+<ul>
+<li><strong>Metadata</strong> (dữ liệu mô tả: nguồn, tiêu đề, đường dẫn mục, ngày hiệu lực, phiên bản, ngôn ngữ, quyền truy cập, loại tài liệu) phục vụ bốn việc: <em>lọc</em>, <em>xếp hạng</em>, <em>trích dẫn</em> và <em>phân quyền</em>.</li>
+<li>Cách rẻ nhất để chunk mang ngữ cảnh: thêm <strong>tiêu đề ngữ cảnh</strong> (tên tài liệu › chương › mục) vào văn bản được embed. Cách tốn hơn: dùng LLM sinh câu ngữ cảnh cho từng chunk — Anthropic báo cáo giảm 35–49% tỷ lệ truy hồi thất bại trên bộ đánh giá của họ, 67% khi thêm reranker.</li>
+<li>Đơn vị được <em>tìm</em> không cần là đơn vị được <em>trả về</em>: có thể lập chỉ mục proposition, tóm tắt, câu hỏi giả định hoặc cây tóm tắt nhiều tầng, rồi trả về văn bản gốc.</li>
+<li>Bảng và hình ảnh cần biểu diễn riêng: hàng bảng thành câu đầy đủ, hình thành mô tả văn bản, hoặc embedding trực tiếp ảnh trang.</li>
+<li>Mỗi kỹ thuật tăng chi phí lập chỉ mục. Chỉ giữ lại khi đánh giá trên dữ liệu của bạn cho thấy lợi ích.</li>
+</ul>
+</div>
+
+<h2>Vấn đề: chunk mất ngữ cảnh</h2>
+<p>Sau khi chunking (xem [[link:du-lieu/chunking]]), mỗi đoạn trở thành một đơn vị độc lập. Nhưng ý nghĩa của văn bản thường nằm ở <em>quan hệ</em> với phần còn lại: đoạn thuộc tài liệu nào, mục nào, phiên bản nào, viết cho ai. Xét ba chunk lấy từ kho tài liệu của một ngân hàng:</p>
+<ul>
+<li>“Mức phí là 4% số tiền giao dịch, tối thiểu 100.000 đồng.” — Phí gì? Thẻ nào?</li>
+<li>“Thời hạn xử lý không quá 5 ngày làm việc kể từ ngày nhận đủ hồ sơ.” — Hồ sơ gì? Quy trình nào?</li>
+<li>“Quy định này thay thế quy định tại Mục 3.” — Mục 3 của văn bản nào?</li>
+</ul>
+<p>Câu hỏi “phí rút tiền mặt thẻ Platinum” có thể không khớp chunk đầu tiên, vì chunk không chứa “rút tiền mặt” hay “Platinum” — các từ đó nằm ở tiêu đề mục, cách hai trang. Và nếu kho có biểu phí 2024 lẫn 2026 với cùng câu chữ, không có gì trong văn bản giúp phân biệt. Đây là hai bài toán khác nhau: <strong>bù ngữ cảnh</strong> (để tìm được) và <strong>gắn thuộc tính</strong> (để lọc và trích dẫn được).</p>
+
+<h2>Các trường metadata nên có</h2>
+<table>
+<thead><tr><th>Trường</th><th>Ví dụ</th><th>Lọc</th><th>Xếp hạng</th><th>Trích dẫn</th><th>Phân quyền</th></tr></thead>
+<tbody>
+<tr><td>Nguồn, đường dẫn gốc</td><td><code>sharepoint://the/bieu-phi-2026.pdf</code>, trang 4</td><td></td><td></td><td>✔</td><td></td></tr>
+<tr><td>Tiêu đề tài liệu</td><td>Biểu phí thẻ tín dụng cá nhân</td><td></td><td>✔</td><td>✔</td><td></td></tr>
+<tr><td>Đường dẫn mục</td><td>Chương II › Mục 3 › 3.2 Phí ứng/rút tiền mặt</td><td></td><td>✔</td><td>✔</td><td></td></tr>
+<tr><td>Loại tài liệu</td><td><code>bieu-phi</code>, <code>quy-che</code>, <code>faq</code>, <code>hop-dong-mau</code></td><td>✔</td><td>✔</td><td></td><td></td></tr>
+<tr><td>Ngày ban hành, ngày hiệu lực, ngày hết hiệu lực</td><td><code>2026-01-15</code>, <code>2026-02-01</code>, <code>null</code></td><td>✔</td><td>✔</td><td>✔</td><td></td></tr>
+<tr><td>Phiên bản, bản thay thế</td><td><code>2026-01</code>; thay thế <code>2024-07</code></td><td>✔</td><td></td><td>✔</td><td></td></tr>
+<tr><td>Ngôn ngữ</td><td><code>vi</code>, <code>en</code></td><td>✔</td><td></td><td></td><td></td></tr>
+<tr><td>Đối tượng áp dụng, sản phẩm</td><td><code>khach-hang-ca-nhan</code>; <code>the-platinum</code></td><td>✔</td><td>✔</td><td></td><td></td></tr>
+<tr><td>Quyền truy cập (ACL)</td><td><code>["toan-he-thong"]</code> hoặc <code>["phong-the", "kiem-soat-noi-bo"]</code></td><td>✔ (bắt buộc)</td><td></td><td></td><td>✔</td></tr>
+<tr><td>Cách trích xuất, độ tin cậy</td><td><code>ocr</code>, <code>docx</code></td><td></td><td>✔</td><td>✔ (cảnh báo)</td><td></td></tr>
+</tbody>
+</table>
+<p>Phần lớn các trường này phải được thu thập ở khâu trước — quyền truy cập từ connector, ngày hiệu lực từ nội dung văn bản (xem [[link:du-lieu/thu-thap-lam-sach]]). Một chunk trong chỉ mục khi đó có thể trông như sau:</p>
+<pre><code>{
+  "chunk_id": "the/bieu-phi-ca-nhan@2026-01#3.2-a",
+  "doc_id": "the/bieu-phi-ca-nhan",
+  "text": "Phí ứng/rút tiền mặt: 4% số tiền giao dịch, tối thiểu 100.000 đồng …",
+  "embed_text": "Biểu phí thẻ tín dụng cá nhân (hiệu lực 01/02/2026) › Mục 3. Phí giao dịch › 3.2 Phí ứng/rút tiền mặt\nPhí ứng/rút tiền mặt: 4% …",
+  "title": "Biểu phí thẻ tín dụng cá nhân",
+  "section_path": ["Chương II", "Mục 3. Phí giao dịch", "3.2 Phí ứng/rút tiền mặt"],
+  "doc_type": "bieu-phi",
+  "products": ["the-platinum", "the-gold"],
+  "effective_from": "2026-02-01",
+  "effective_to": null,
+  "version": "2026-01",
+  "language": "vi",
+  "acl": ["toan-he-thong"],
+  "source_uri": "sharepoint://the/bieu-phi-2026.pdf",
+  "page": 4
+}
+</code></pre>
+<p>Để ý hai trường văn bản: <code>text</code> là nội dung gốc để đưa vào prompt và hiển thị trích dẫn; <code>embed_text</code> là nội dung được embedding và lập chỉ mục BM25, có thêm tiêu đề ngữ cảnh. Các con số trong ví dụ là minh họa.</p>
+
+<h2>Lọc theo metadata</h2>
+<p>Lọc là cách chính xác nhất để loại bỏ những gì chắc chắn sai: tài liệu hết hiệu lực, ngôn ngữ khác, sản phẩm khác, và — bắt buộc — tài liệu người hỏi không có quyền xem. Bộ lọc có thể đến từ ba nơi: <em>ngữ cảnh phiên</em> (quyền của người dùng, chi nhánh, ngôn ngữ giao diện), <em>quy tắc nghiệp vụ</em> (mặc định chỉ lấy tài liệu đang hiệu lực), và <em>trích từ câu hỏi</em> (“quy định năm 2024” → lọc theo thời gian; kỹ thuật này được bàn ở [[link:tim-kiem/xu-ly-truy-van]]).</p>
+<div class="callout kinh-nghiem">
+<p><strong>Lọc trước hay lọc sau?</strong> Lọc <em>sau</em> (lấy top-k rồi bỏ các kết quả không thỏa) đơn giản nhưng có thể trả về ít hơn k kết quả, thậm chí không kết quả nào, khi bộ lọc chặt. Lọc <em>trước</em> hoặc <em>trong khi</em> tìm kiếm (chỉ xét các vector thỏa bộ lọc) cho đủ k kết quả, nhưng với một số cấu trúc chỉ mục ANN, bộ lọc rất chọn lọc có thể làm giảm recall hoặc tốc độ — mức độ phụ thuộc vào cơ sở dữ liệu vector cụ thể. Với <strong>quyền truy cập</strong>, đừng bao giờ dựa vào lọc sau ở tầng ứng dụng mà quên kiểm tra số lượng; và đừng để chunk không được phép đi tới LLM. Xem [[link:truy-hoi/vector-index]] và [[link:van-hanh/bao-mat]].</p>
+</div>
+<p>Metadata cũng dùng được để <em>xếp hạng</em> mềm thay vì lọc cứng: tăng điểm cho tài liệu mới hơn, cho loại <code>bieu-phi</code> khi câu hỏi có chữ “phí”, cho tài liệu chính thức so với email. Cách này cần đo cẩn thận vì dễ tạo thiên lệch khó thấy.</p>
+
+<h2>Đưa ngữ cảnh vào chính chunk</h2>
+
+<h3>Tiêu đề ngữ cảnh (contextual chunk header)</h3>
+<p>Cách đơn giản nhất: trước khi embedding, ghép vào đầu mỗi chunk tên tài liệu và đường dẫn mục, như trường <code>embed_text</code> ở ví dụ trên. Không tốn lệnh gọi LLM nào, hoàn toàn xác định (deterministic), và giải quyết phần lớn trường hợp “chunk không chứa từ khóa nằm ở tiêu đề”. Điều kiện: khâu trích xuất phải giữ được heading. Đây là thực hành phổ biến, nên là bước đầu tiên trước mọi kỹ thuật tốn kém hơn.</p>
+
+<h3>Contextual Retrieval: dùng LLM viết ngữ cảnh cho từng chunk</h3>
+<p>Khi tiêu đề không đủ — tài liệu ít heading, hoặc ngữ cảnh cần thiết nằm rải rác trong văn bản — có thể nhờ LLM đọc cả tài liệu và viết một đoạn ngắn đặt chunk vào bối cảnh. Ví dụ với chunk phí ở trên, đoạn ngữ cảnh có thể là: “Đoạn này thuộc Biểu phí thẻ tín dụng cá nhân hiệu lực từ 01/02/2026, mục phí ứng/rút tiền mặt, áp dụng cho thẻ Gold và Platinum.”</p>
+<div class="callout nghien-cuu">
+<p>Anthropic (09/2024) gọi kỹ thuật này là <strong>Contextual Retrieval</strong>: dùng Claude 3 Haiku sinh 50–100 token ngữ cảnh cho mỗi chunk, ghép vào chunk trước khi embedding <em>và</em> trước khi lập chỉ mục BM25[[cite:anthropic2024contextual]]. Trên bộ đánh giá của họ gồm các miền mã nguồn, tiểu thuyết, bài báo ArXiv và bài báo khoa học, với chỉ số tỷ lệ truy hồi thất bại top-20 (1 − recall@20), trung bình trên các miền và dùng cấu hình embedding tốt nhất (Gemini Text 004):</p>
+<ul>
+<li>Baseline: 5,7% thất bại.</li>
+<li>Chỉ contextual embeddings: 3,7% — giảm 35%.</li>
+<li>Contextual embeddings + contextual BM25: 2,9% — giảm 49%.</li>
+<li>Thêm rerank (lấy 150 ứng viên, reranker của Cohere, giữ 20): 1,9% — giảm 67%.</li>
+</ul>
+<p>Bài viết cho biết việc thêm ngữ cảnh cải thiện ở mọi tổ hợp mô hình embedding và nguồn dữ liệu họ thử. Chi phí ước tính một lần là 1,02 USD cho mỗi triệu token tài liệu khi dùng prompt caching, với giả định chunk 800 token, tài liệu 8.000 token, 50 token hướng dẫn và 100 token ngữ cảnh mỗi chunk — theo bảng giá thời điểm đó.</p>
+<p><strong>Điều kiện cần nhớ:</strong> đây là bộ đánh giá do chính nhà cung cấp xây dựng, dữ liệu tiếng Anh, chỉ số là recall ở top-20 chứ không phải chất lượng câu trả lời; các mức giảm là tương đối trên một baseline vốn đã thấp. Bài viết cũng khuyên tự thử nghiệm trên trường hợp sử dụng của mình.</p>
+</div>
+<p>Cái giá của Contextual Retrieval là chi phí LLM khi lập chỉ mục (và khi lập chỉ mục lại), độ trễ của pipeline thu thập, và rủi ro LLM viết ngữ cảnh <em>sai</em> — ví dụ gán nhầm chunk cho sản phẩm khác — mà không ai phát hiện. Nên lưu đoạn ngữ cảnh sinh ra cùng chunk để có thể kiểm tra và hiển thị khi gỡ lỗi. Late chunking là một hướng khác cho cùng bài toán, không cần LLM nhưng cần mô hình embedding phù hợp (xem [[link:du-lieu/chunking]]).</p>
+
+<h2>Thay đổi đơn vị được lập chỉ mục</h2>
+<p>Các kỹ thuật ở phần này xuất phát từ một quan sát: thứ ta <em>so khớp</em> với câu hỏi không bắt buộc phải là thứ ta <em>đưa cho mô hình đọc</em>.</p>
+
+<h3>Proposition: mệnh đề nguyên tử</h3>
+<div class="callout nghien-cuu">
+<p>Chen và cộng sự (Dense X Retrieval) đề xuất <strong>proposition</strong> — một biểu đạt nguyên tử chứa đúng một dữ kiện, tự đứng được — làm đơn vị lập chỉ mục. Họ xây kho FactoidWiki từ Wikipedia tiếng Anh (khoảng 41 triệu passage, 257 triệu proposition), sinh proposition bằng một mô hình Flan-T5-large được chưng cất từ GPT-4[[cite:chen2023densex]]. Trên 5 bộ QA (Natural Questions, TriviaQA, WebQuestions, SQuAD, EntityQuestions), lập chỉ mục theo proposition tăng Recall@5 trung bình so với passage: +12,0 điểm với SimCSE và +9,3 với Contriever (hai bộ truy hồi không giám sát), nhưng chỉ khoảng +2,6 với DPR và +2,8 với GTR (có giám sát). Lợi thế lớn hơn với câu hỏi về thực thể ít phổ biến. Với cùng ngân sách token đưa vào mô hình đọc, proposition cũng cải thiện độ chính xác QA.</p>
+<p><strong>Điều kiện cần nhớ:</strong> văn bản bách khoa tiếng Anh, câu hỏi dữ kiện ngắn; mức cải thiện nhỏ với bộ truy hồi đã được huấn luyện có giám sát. Câu hỏi cần giải thích quy trình hoặc tổng hợp có thể không hưởng lợi.</p>
+</div>
+<p>Trong thực tế, proposition làm số đơn vị trong chỉ mục tăng vài lần (trong FactoidWiki, khoảng 6 lần so với passage) và cần một lượt LLM qua toàn bộ kho. Một cách dùng tiết kiệm hơn là kết hợp với parent-child: lập chỉ mục proposition, trả về đoạn gốc chứa nó.</p>
+
+<h3>Tóm tắt phân cấp: RAPTOR</h3>
+<p>Câu hỏi như “quy chế này thay đổi những gì về chế độ công tác so với bản trước?” không khớp với bất kỳ đoạn đơn lẻ nào — câu trả lời nằm ở tổng thể. RAPTOR của Sarthi và cộng sự giải quyết bằng cách xây một <em>cây</em>: embedding các chunk, gom cụm, tóm tắt mỗi cụm bằng LLM, rồi lặp lại trên các bản tóm tắt cho tới gốc. Khi truy vấn, hệ thống tìm trên mọi tầng của cây, nên có thể lấy cả chi tiết lẫn tóm tắt tổng quan[[cite:sarthi2024raptor]]. Tác giả báo cáo cải thiện so với truy hồi chunk truyền thống trên nhiều tác vụ, và khi kết hợp với GPT-4, tăng 20 điểm phần trăm độ chính xác tuyệt đối so với kết quả tốt nhất trước đó trên benchmark QuALITY (đọc hiểu văn bản dài).</p>
+<p>Đánh đổi: chi phí LLM để tóm tắt toàn bộ kho, cây phải xây lại khi tài liệu thay đổi nhiều, và tóm tắt có thể sai hoặc bỏ sót mà không dễ phát hiện. Phù hợp với kho tương đối ổn định và câu hỏi tổng hợp; với câu hỏi trên toàn bộ một kho lớn, xem thêm GraphRAG ở [[link:nang-cao/agentic-graphrag]].</p>
+
+<h3>Đa biểu diễn: lập chỉ mục bản đại diện, trả về bản gốc</h3>
+<figure class="diagram">
+<svg viewBox="0 0 760 290" width="760" role="img" aria-labelledby="md-t md-d">
+<title id="md-t">Đa biểu diễn: nhiều vector trỏ về cùng một đoạn gốc</title>
+<desc id="md-d">Một đoạn gốc trong biểu phí có ba biểu diễn được lập chỉ mục: chính đoạn văn kèm tiêu đề ngữ cảnh, một bản tóm tắt ngắn, và các câu hỏi giả định mà đoạn đó trả lời. Câu hỏi của người dùng khớp với một câu hỏi giả định; hệ thống theo con trỏ trả về đoạn gốc để đưa vào prompt.</desc>
+<defs><marker id="md-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="arrowhead"/></marker></defs>
+<text x="20" y="24" font-size="13" font-weight="700" class="muted">CHỈ MỤC (được so khớp)</text>
+<rect x="20" y="36" width="300" height="52" rx="8" class="box"/><text x="170" y="58" font-size="13" text-anchor="middle">Đoạn + tiêu đề ngữ cảnh</text><text x="170" y="76" font-size="11.5" text-anchor="middle" class="muted">“Biểu phí thẻ › 3.2 Phí rút tiền mặt: 4%…”</text>
+<rect x="20" y="100" width="300" height="52" rx="8" class="box"/><text x="170" y="122" font-size="13" text-anchor="middle">Tóm tắt</text><text x="170" y="140" font-size="11.5" text-anchor="middle" class="muted">“Phí rút tiền mặt thẻ tín dụng 2026”</text>
+<rect x="20" y="164" width="300" height="52" rx="8" class="box-a"/><text x="170" y="186" font-size="13" text-anchor="middle" font-weight="700">Câu hỏi giả định</text><text x="170" y="204" font-size="11.5" text-anchor="middle" class="muted">“Rút tiền mặt thẻ tín dụng mất phí bao nhiêu?”</text>
+<rect x="460" y="90" width="280" height="76" rx="8" class="box-w"/><text x="600" y="118" font-size="14" text-anchor="middle" font-weight="700">Đoạn gốc</text><text x="600" y="138" font-size="11.5" text-anchor="middle" class="muted">văn bản nguyên vẹn + metadata</text><text x="600" y="154" font-size="11.5" text-anchor="middle" class="muted">→ đưa vào prompt, dùng để trích dẫn</text>
+<path d="M320 62 C390 62 400 110 458 116M320 126h138M320 190 C390 190 400 142 458 138" class="ln-d" marker-end="url(#md-ah)"/>
+<text x="390" y="104" font-size="11.5" text-anchor="middle" class="muted">trỏ tới</text>
+<rect x="20" y="236" width="300" height="40" rx="8" class="box-b"/><text x="170" y="261" font-size="13" text-anchor="middle">“Ứng tiền mặt thẻ Platinum tốn phí?”</text>
+<path d="M170 234V218" class="ln" marker-end="url(#md-ah)"/>
+</svg>
+<figcaption>Đa biểu diễn: mỗi biểu diễn có vector riêng nhưng đều trỏ về cùng một đoạn gốc. Câu hỏi khớp với biểu diễn nào, mô hình vẫn đọc văn bản gốc.</figcaption>
+</figure>
+<p>Ý tưởng chung: với mỗi đoạn gốc, tạo thêm một hoặc nhiều <em>biểu diễn</em> dễ khớp với câu hỏi hơn, lập chỉ mục chúng, và lưu con trỏ về đoạn gốc. Các biểu diễn hay dùng:</p>
+<ul>
+<li><strong>Tóm tắt</strong>: hữu ích khi đoạn gốc dài, nhiều chi tiết nhiễu, hoặc là bảng/hình.</li>
+<li><strong>Câu hỏi giả định</strong> (hypothetical questions): LLM sinh các câu hỏi mà đoạn trả lời được. Câu hỏi của người dùng thường giống câu hỏi khác hơn là giống văn bản quy định — đặc biệt khi người dùng nói “ứng tiền mặt” còn văn bản viết “rút tiền mặt”. Ý tưởng mở rộng tài liệu bằng câu hỏi dự đoán đã có từ doc2query của Nogueira và cộng sự (2019): sinh các truy vấn mà tài liệu có thể trả lời rồi nối vào tài liệu trước khi lập chỉ mục, cho kết quả tốt trên các tác vụ truy hồi họ thử[[cite:nogueira2019doc2query]].</li>
+<li><strong>Đơn vị nhỏ hơn</strong>: câu, proposition (như trên), hoặc chunk con trong parent-child.</li>
+</ul>
+<p>Lưu ý: một đoạn có nhiều biểu diễn trúng cùng lúc phải được khử trùng trước khi đưa vào prompt, nếu không top-k bị lấp bởi một đoạn duy nhất. Và các biểu diễn do LLM sinh cũng cần được lập chỉ mục lại khi đoạn gốc thay đổi.</p>
+
+<h2>Bảng và hình ảnh</h2>
+<h3>Bảng</h3>
+<p>Một bảng biểu phí đưa vào embedding dưới dạng lưới số thường cho vector kém. Các cách biểu diễn bổ sung cho nhau:</p>
+<ol>
+<li><strong>Giữ bảng dạng Markdown/HTML</strong> trong <code>text</code> để mô hình đọc được cấu trúc khi sinh câu trả lời.</li>
+<li><strong>Tuyến tính hóa từng hàng</strong> thành câu đầy đủ để embedding và BM25: “Thẻ Platinum — phí thường niên: 1.000.000 đồng; phí rút tiền mặt: 4%, tối thiểu 100.000 đồng (Biểu phí thẻ 2026).” Mỗi hàng (hoặc nhóm hàng) thành một biểu diễn trỏ về bảng gốc.</li>
+<li><strong>Tóm tắt bảng</strong>: một câu mô tả bảng chứa gì (“Bảng so sánh phí của 3 hạng thẻ tín dụng…”) để khớp câu hỏi chung.</li>
+<li>Khi câu hỏi cần <strong>tính toán</strong> trên bảng (lọc, tổng, so sánh nhiều hàng), cân nhắc lưu bảng như dữ liệu có cấu trúc và truy vấn bằng công cụ thay vì truy hồi văn bản (xem [[link:nen-tang/khi-nao-dung-rag]]).</li>
+</ol>
+<h3>Hình ảnh, sơ đồ, trang quét</h3>
+<p>Có hai hướng. <strong>Chuyển sang văn bản</strong>: dùng chú thích có sẵn, OCR chữ trong hình, hoặc mô hình thị giác–ngôn ngữ (VLM) viết mô tả (“Sơ đồ quy trình phê duyệt khoản vay gồm 4 bước: …”), rồi lập chỉ mục mô tả đó và trỏ về hình gốc. Hướng này dùng được với mọi pipeline văn bản, nhưng phụ thuộc chất lượng mô tả. <strong>Embedding trực tiếp ảnh trang</strong>: ColPali của Faysse và cộng sự dùng một VLM tạo embedding đa vector từ ảnh trang tài liệu, bỏ qua bước trích văn bản; tác giả báo cáo hiệu quả vượt các pipeline truy hồi dựa trên trích xuất trên benchmark ViDoRe dành cho tài liệu giàu hình ảnh, bảng và bố cục[[cite:faysse2024colpali]]. Hướng này hấp dẫn với tài liệu quét, slide, báo cáo nhiều biểu đồ, nhưng đòi hỏi hạ tầng khác (đa vector, mô hình thị giác) và cần kiểm tra khả năng với tiếng Việt trên dữ liệu của bạn.</p>
+
+<h2>So sánh các kỹ thuật</h2>
+<table>
+<thead><tr><th>Kỹ thuật</th><th>Chi phí lập chỉ mục</th><th>Ảnh hưởng lúc truy vấn</th><th>Giúp nhiều nhất khi</th><th>Rủi ro</th></tr></thead>
+<tbody>
+<tr><td>Metadata + lọc</td><td>Thấp (nếu thu thập từ đầu)</td><td>Không đáng kể; có thể ảnh hưởng recall ANN khi lọc rất chặt</td><td>Nhiều phiên bản, nhiều sản phẩm, phân quyền</td><td>Metadata sai lọc mất tài liệu đúng</td></tr>
+<tr><td>Tiêu đề ngữ cảnh</td><td>Rất thấp</td><td>Không</td><td>Tài liệu có heading rõ</td><td>Tiêu đề quá dài lấn nội dung trong vector</td></tr>
+<tr><td>Contextual Retrieval (LLM)</td><td>Một lượt LLM mỗi chunk (giảm nhờ caching)</td><td>Không</td><td>Ngữ cảnh rải rác, ít heading</td><td>Ngữ cảnh sinh sai, chi phí khi lập chỉ mục lại</td></tr>
+<tr><td>Proposition</td><td>Một lượt LLM qua toàn kho; số đơn vị tăng vài lần</td><td>Chỉ mục lớn hơn</td><td>Câu hỏi dữ kiện, thực thể hiếm, bộ truy hồi không giám sát</td><td>Mất ngữ cảnh giữa các mệnh đề</td></tr>
+<tr><td>RAPTOR</td><td>Gom cụm + tóm tắt nhiều tầng</td><td>Tìm trên nhiều tầng</td><td>Câu hỏi tổng hợp trên tài liệu dài</td><td>Tóm tắt sai, khó cập nhật tăng dần</td></tr>
+<tr><td>Câu hỏi giả định / tóm tắt</td><td>Một lượt LLM mỗi đoạn</td><td>Cần khử trùng kết quả</td><td>Người dùng diễn đạt khác văn bản</td><td>Câu hỏi sinh lệch, chỉ mục phình</td></tr>
+<tr><td>Hàng bảng → câu</td><td>Thấp (quy tắc)</td><td>Không</td><td>Biểu phí, hạn mức, bảng tra</td><td>Bảng phức tạp (ô gộp) tuyến tính hóa sai</td></tr>
+<tr><td>Embedding ảnh trang</td><td>Mô hình thị giác, đa vector</td><td>Hạ tầng truy hồi khác</td><td>Tài liệu quét, slide, nhiều biểu đồ</td><td>Chưa chắc tốt với tiếng Việt; khó trích dẫn ở mức câu</td></tr>
+</tbody>
+</table>
+
+<div class="callout canh-bao">
+<p><strong>Lỗi thường gặp</strong></p>
+<ul>
+<li><em>Để metadata quan trọng chỉ nằm trong tên tệp</em> (“bieu-phi-moi-final-v3.pdf”) — không lọc được, không biết bản nào hiệu lực.</li>
+<li><em>Embed cả khối JSON metadata</em> vào vector — các trường như mã, ngày, đường dẫn làm nhiễu ý nghĩa. Chỉ đưa những gì giúp hiểu nội dung (tên tài liệu, đường dẫn mục) vào <code>embed_text</code>; phần còn lại để lọc.</li>
+<li><em>Hiển thị biểu diễn phụ thay vì văn bản gốc</em> — trích dẫn một câu hỏi giả định hoặc một bản tóm tắt do LLM viết như thể đó là văn bản chính sách.</li>
+<li><em>Chồng nhiều kỹ thuật cùng lúc</em> — không biết kỹ thuật nào giúp, kỹ thuật nào chỉ tốn tiền.</li>
+</ul>
+</div>
+
+<div class="callout nhan-dinh">
+<p>Chúng tôi cho rằng thứ tự đầu tư hợp lý cho đa số hệ thống doanh nghiệp là: (1) metadata đúng và đầy đủ, nhất là hiệu lực và quyền; (2) tiêu đề ngữ cảnh xác định; (3) hybrid search và reranker (xem [[link:tim-kiem/hybrid-search]], [[link:tim-kiem/reranking]]); rồi mới tới (4) các kỹ thuật cần LLM khi lập chỉ mục như Contextual Retrieval, câu hỏi giả định, proposition, RAPTOR. Lý do: ba bước đầu rẻ, xác định, dễ gỡ lỗi; bước thứ tư tốn chi phí lặp lại mỗi lần lập chỉ mục và thêm một nguồn lỗi khó thấy. Thứ tự này là nhận định, không phải kết quả thực nghiệm — dữ liệu của bạn có thể cho kết quả khác.</p>
+</div>
+
+<h2>Đánh giá và tự kiểm tra</h2>
+<div class="callout kiem-chung">
+<ol>
+<li><strong>Thử nghiệm loại trừ (ablation)</strong>: cùng bộ câu hỏi, cùng mô hình embedding, đo Recall@k lần lượt với (a) chunk trần, (b) + tiêu đề ngữ cảnh, (c) + kỹ thuật bạn định thêm. Chỉ giữ bước nào cải thiện rõ so với chi phí. Chỉ số và công cụ ở [[link:danh-gia/do-luong-retrieval]].</li>
+<li><strong>Kiểm tra bộ lọc</strong>: với mỗi giá trị metadata quan trọng, chạy vài câu hỏi có và không có bộ lọc; số kết quả bị loại có hợp lý không? Có câu hỏi nào trả về 0 kết quả vì lọc quá chặt?</li>
+<li><strong>Kiểm tra phân quyền</strong>: đăng nhập bằng tài khoản thuộc nhóm hẹp nhất và hỏi về nội dung của nhóm khác. Không chunk nào của nhóm khác được xuất hiện trong log truy hồi.</li>
+<li><strong>Đọc mẫu biểu diễn do LLM sinh</strong>: lấy 20 đoạn ngữ cảnh hoặc câu hỏi giả định ngẫu nhiên, so với văn bản gốc. Có cái nào sai sản phẩm, sai thời gian, sai đối tượng không?</li>
+<li><strong>Câu hỏi về bảng</strong>: viết 10 câu hỏi mà đáp án là một ô trong bảng; kiểm tra đoạn được truy hồi có chứa đúng hàng đó, kèm tên cột không.</li>
+</ol>
+</div>
+
+<h2>Đọc tiếp</h2>
+<ul>
+<li>Bước tiếp theo trong pipeline: [[link:truy-hoi/embedding]] — biến <code>embed_text</code> thành vector.</li>
+<li>Kết hợp BM25 với vector để tận dụng tiêu đề ngữ cảnh: [[link:tim-kiem/hybrid-search]].</li>
+<li>Trích bộ lọc từ câu hỏi người dùng: [[link:tim-kiem/xu-ly-truy-van]].</li>
+<li>Áp dụng quyền truy cập và rủi ro rò rỉ qua chỉ mục: [[link:van-hanh/bao-mat]].</li>
+<li>Đọc gốc: Anthropic Contextual Retrieval[[cite:anthropic2024contextual]], Dense X Retrieval[[cite:chen2023densex]], RAPTOR[[cite:sarthi2024raptor]].</li>
+</ul>

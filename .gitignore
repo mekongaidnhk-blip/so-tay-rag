@@ -1,0 +1,7 @@
+dist/
+.work/
+build.log
+node_modules/
+.claude/
+AGENTS.md
+.DS_Store

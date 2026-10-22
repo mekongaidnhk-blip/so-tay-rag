@@ -1,0 +1,233 @@
+{
+  "anthropic2026cache": {
+    "group": "Tài liệu chính thức và mã nguồn",
+    "kind": "Tài liệu chính thức",
+    "authors": "Anthropic",
+    "year": "2026",
+    "title": "Prompt caching (Claude API documentation)",
+    "short": "Anthropic prompt caching",
+    "venue": "Claude Platform Docs, truy cập 10/2026",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching",
+    "why": "Mô tả cơ chế cache tiền tố (tools → system → messages) tới điểm cache_control, thời gian sống 5 phút hoặc 1 giờ, ngưỡng độ dài tối thiểu theo mô hình và hệ số giá ghi/đọc cache. Chi tiết thay đổi theo mô hình; đọc bản mới nhất."
+  },
+  "openai2026cache": {
+    "group": "Tài liệu chính thức và mã nguồn",
+    "kind": "Tài liệu chính thức",
+    "authors": "OpenAI",
+    "year": "2026",
+    "title": "Prompt caching (OpenAI API documentation)",
+    "short": "OpenAI prompt caching",
+    "venue": "OpenAI API Docs, truy cập 10/2026",
+    "url": "https://developers.openai.com/api/docs/guides/prompt-caching",
+    "why": "Caching bật mặc định cho mô hình được hỗ trợ, yêu cầu toàn bộ tiền tố trùng khớp, có ngưỡng token tối thiểu và thời gian lưu giữ khác nhau theo mô hình; khuyến nghị đặt nội dung ổn định lên đầu prompt."
+  },
+  "zilliz2023gptcache": {
+    "group": "Tài liệu chính thức và mã nguồn",
+    "kind": "Mã nguồn",
+    "authors": "Zilliz",
+    "year": "2023",
+    "title": "GPTCache: Semantic cache for LLMs",
+    "short": "GPTCache",
+    "venue": "GitHub, giấy phép MIT",
+    "url": "https://github.com/zilliztech/GPTCache",
+    "why": "Thư viện cache ngữ nghĩa cho phản hồi LLM dựa trên độ tương đồng embedding của câu hỏi; README thừa nhận có thể có dương tính giả và âm tính giả khi so khớp cache."
+  },
+  "zou2024poisonedrag": {
+    "group": "Bảo mật",
+    "kind": "Bài báo",
+    "authors": "Zou, W., Geng, R., Wang, B., Jia, J.",
+    "year": "2024",
+    "title": "PoisonedRAG: Knowledge Corruption Attacks to Retrieval-Augmented Generation of Large Language Models",
+    "short": "PoisonedRAG",
+    "venue": "USENIX Security 2025, arXiv:2402.07867",
+    "url": "https://arxiv.org/abs/2402.07867",
+    "why": "Tấn công đầu độc kho tri thức của RAG: chèn 5 đoạn độc hại cho mỗi câu hỏi mục tiêu đạt tỷ lệ thành công khoảng 90% trong kho hàng triệu đoạn; các phòng thủ được thử chưa đủ."
+  },
+  "morris2023": {
+    "group": "Bảo mật",
+    "kind": "Bài báo",
+    "authors": "Morris, J. X., Kuleshov, V., Shmatikov, V., Rush, A. M.",
+    "year": "2023",
+    "title": "Text Embeddings Reveal (Almost) As Much As Text",
+    "short": "Morris et al. 2023 (vec2text)",
+    "venue": "EMNLP 2023, arXiv:2310.06816",
+    "url": "https://arxiv.org/abs/2310.06816",
+    "why": "Đảo ngược embedding bằng phương pháp lặp sửa-và-embedding-lại, khôi phục chính xác 92% đoạn 32 token và trích được họ tên từ embedding ghi chú lâm sàng. Lý do không coi embedding là dữ liệu ẩn danh."
+  },
+  "hines2024": {
+    "group": "Bảo mật",
+    "kind": "Bài báo",
+    "authors": "Hines, K., Lopez, G., Hall, M., Zarfati, F., Zunger, Y., Kiciman, E.",
+    "year": "2024",
+    "title": "Defending Against Indirect Prompt Injection Attacks With Spotlighting",
+    "short": "Spotlighting",
+    "venue": "arXiv:2403.14720",
+    "url": "https://arxiv.org/abs/2403.14720",
+    "why": "Họ kỹ thuật prompt biến đổi đầu vào không tin cậy để báo hiệu nguồn gốc; trên các mô hình họ GPT trong thí nghiệm của tác giả, giảm tỷ lệ tấn công thành công từ trên 50% xuống dưới 2%."
+  },
+  "microsoft2026trimming": {
+    "group": "Bảo mật",
+    "kind": "Tài liệu chính thức",
+    "authors": "Microsoft",
+    "year": "2026",
+    "title": "Security filter pattern (security trimming) – Azure AI Search",
+    "short": "Azure AI Search security filters",
+    "venue": "Microsoft Learn, cập nhật 08/2026",
+    "url": "https://learn.microsoft.com/en-us/azure/search/search-security-trimming-for-azure-search",
+    "why": "Ví dụ cụ thể về phân quyền cấp tài liệu bằng bộ lọc theo định danh nhóm áp cho mọi truy vấn; nói rõ trường định danh chỉ là chuỗi lọc, không tự xác thực."
+  },
+  "vasnetsov2019": {
+    "group": "Retrieval và biểu diễn",
+    "kind": "Blog kỹ thuật",
+    "authors": "Vasnetsov, A.",
+    "year": "2019",
+    "title": "Filterable HNSW Without Recall Loss",
+    "short": "Filterable HNSW (Qdrant)",
+    "venue": "Qdrant Articles",
+    "url": "https://qdrant.tech/articles/filterable-hnsw/",
+    "why": "Phân tích vì sao lọc chặt khi duyệt đồ thị HNSW làm đồ thị rời rạc (lý thuyết thấm) và đề xuất thêm cạnh theo giá trị metadata cùng lập kế hoạch truy vấn. Bài nêu thiết kế ban đầu năm 2019, không phải mô tả đầy đủ hệ thống hiện tại."
+  },
+  "baochinhphu2025luat": {
+    "group": "Bảo mật",
+    "kind": "Tài liệu chính thức",
+    "authors": "Báo Điện tử Chính phủ",
+    "year": "2025",
+    "title": "Quốc hội thông qua Luật Bảo vệ dữ liệu cá nhân",
+    "short": "Luật BVDLCN được thông qua",
+    "venue": "baochinhphu.vn, 26/06/2025",
+    "url": "https://baochinhphu.vn/quoc-hoi-thong-qua-luat-bao-ve-du-lieu-ca-nhan-102250626151253737.htm",
+    "why": "Thông tin chính thức về việc thông qua Luật Bảo vệ dữ liệu cá nhân (26/6/2025, hiệu lực 1/1/2026), hậu kiểm chuyển dữ liệu xuyên biên giới và ưu đãi cho doanh nghiệp nhỏ, khởi nghiệp. Không phải văn bản luật gốc; tra toàn văn tại cơ sở dữ liệu văn bản pháp luật."
+  },
+  "baochinhphu2025hieuluc": {
+    "group": "Bảo mật",
+    "kind": "Tài liệu chính thức",
+    "authors": "Báo Điện tử Chính phủ",
+    "year": "2025",
+    "title": "Luật Bảo vệ dữ liệu cá nhân chính thức có hiệu lực từ ngày mai (1/1/2026)",
+    "short": "Luật BVDLCN có hiệu lực",
+    "venue": "baochinhphu.vn, 31/12/2025",
+    "url": "https://baochinhphu.vn/luat-bao-ve-du-lieu-ca-nhan-chinh-thuc-co-hieu-luc-tu-ngay-mai-1-1-2026-102251231155609721.htm",
+    "why": "Xác nhận mốc hiệu lực 1/1/2026, nhắc Nghị định 13 là bước trước luật và liệt kê các quyền của chủ thể dữ liệu (biết, đồng ý, truy cập, chỉnh sửa, yêu cầu xóa)."
+  },
+  "baochinhphu2025nd356": {
+    "group": "Bảo mật",
+    "kind": "Tài liệu chính thức",
+    "authors": "Báo Điện tử Chính phủ",
+    "year": "2025",
+    "title": "Điều kiện của tổ chức kinh doanh dịch vụ xử lý dữ liệu cá nhân",
+    "short": "Nghị định 356/2025/NĐ-CP",
+    "venue": "baochinhphu.vn, 31/12/2025",
+    "url": "https://baochinhphu.vn/dieu-kien-cua-to-chuc-kinh-doanh-dich-vu-xu-ly-du-lieu-ca-nhan-102251231180350419.htm",
+    "why": "Thông tin về Nghị định 356/2025/NĐ-CP ngày 31/12/2025 quy định chi tiết một số điều của Luật Bảo vệ dữ liệu cá nhân."
+  },
+  "trivedi2023ircot": {
+    "group": "Hướng nâng cao",
+    "kind": "Bài báo",
+    "authors": "Trivedi, H., Balasubramanian, N., Khot, T., Sabharwal, A.",
+    "year": "2023",
+    "title": "Interleaving Retrieval with Chain-of-Thought Reasoning for Knowledge-Intensive Multi-Step Questions",
+    "short": "IRCoT",
+    "venue": "ACL 2023, arXiv:2212.10509",
+    "url": "https://arxiv.org/abs/2212.10509",
+    "why": "Xen kẽ truy hồi với từng câu chain-of-thought cho câu hỏi nhiều bước; với GPT-3 cải thiện truy hồi tới 21 điểm và QA tới 15 điểm trên HotpotQA, 2WikiMultihopQA, MuSiQue, IIRC."
+  },
+  "jiang2023flare": {
+    "group": "Hướng nâng cao",
+    "kind": "Bài báo",
+    "authors": "Jiang, Z., Xu, F. F., Gao, L., Sun, Z., Liu, Q., Dwivedi-Yu, J., Yang, Y., Callan, J., Neubig, G.",
+    "year": "2023",
+    "title": "Active Retrieval Augmented Generation",
+    "short": "FLARE",
+    "venue": "EMNLP 2023, arXiv:2305.06983",
+    "url": "https://arxiv.org/abs/2305.06983",
+    "why": "FLARE: viết nháp câu tiếp theo, nếu có token độ tin cậy thấp thì dùng bản nháp làm truy vấn để truy hồi rồi viết lại; nhắm vào sinh văn bản dài."
+  },
+  "yan2024crag": {
+    "group": "Hướng nâng cao",
+    "kind": "Bài báo",
+    "authors": "Yan, S.-Q., Gu, J.-C., Zhu, Y., Ling, Z.-H.",
+    "year": "2024",
+    "title": "Corrective Retrieval Augmented Generation",
+    "short": "CRAG",
+    "venue": "arXiv:2401.15884",
+    "url": "https://arxiv.org/abs/2401.15884",
+    "why": "Bộ đánh giá truy hồi nhẹ chọn hành động Đúng/Sai/Mơ hồ (lọc tài liệu, tìm web, hoặc kết hợp); dạng plug-and-play cho pipeline RAG."
+  },
+  "jeong2024adaptive": {
+    "group": "Hướng nâng cao",
+    "kind": "Bài báo",
+    "authors": "Jeong, S., Baek, J., Cho, S., Hwang, S. J., Park, J. C.",
+    "year": "2024",
+    "title": "Adaptive-RAG: Learning to Adapt Retrieval-Augmented Large Language Models through Question Complexity",
+    "short": "Adaptive-RAG",
+    "venue": "NAACL 2024, arXiv:2403.14403",
+    "url": "https://arxiv.org/abs/2403.14403",
+    "why": "Bộ phân loại là mô hình ngôn ngữ nhỏ dự đoán độ phức tạp câu hỏi để chọn không truy hồi, truy hồi một lần hoặc truy hồi lặp."
+  },
+  "yao2023react": {
+    "group": "Hướng nâng cao",
+    "kind": "Bài báo",
+    "authors": "Yao, S., Zhao, J., Yu, D., Du, N., Shafran, I., Narasimhan, K., Cao, Y.",
+    "year": "2023",
+    "title": "ReAct: Synergizing Reasoning and Acting in Language Models",
+    "short": "ReAct",
+    "venue": "ICLR 2023, arXiv:2210.03629",
+    "url": "https://arxiv.org/abs/2210.03629",
+    "why": "Mẫu xen kẽ suy nghĩ và hành động (gọi công cụ) làm nền cho agentic RAG; thí nghiệm với API Wikipedia trên HotpotQA, Fever, cùng ALFWorld và WebShop."
+  },
+  "edge2024graphrag": {
+    "group": "Hướng nâng cao",
+    "kind": "Bài báo",
+    "authors": "Edge, D., Trinh, H., Cheng, N., Bradley, J., Chao, A., Mody, A., Truitt, S., Metropolitansky, D., Ness, R. O., Larson, J.",
+    "year": "2024",
+    "title": "From Local to Global: A Graph RAG Approach to Query-Focused Summarization",
+    "short": "GraphRAG",
+    "venue": "arXiv:2404.16130",
+    "url": "https://arxiv.org/abs/2404.16130",
+    "why": "Dùng LLM dựng đồ thị thực thể và tóm tắt cộng đồng để trả lời câu hỏi toàn cục trên kho khoảng một triệu token; vượt RAG thông thường về tính toàn diện và đa dạng."
+  },
+  "microsoft2024graphragcode": {
+    "group": "Tài liệu chính thức và mã nguồn",
+    "kind": "Mã nguồn",
+    "authors": "Microsoft",
+    "year": "2024",
+    "title": "GraphRAG: a modular graph-based Retrieval-Augmented Generation system",
+    "short": "GraphRAG (mã nguồn)",
+    "venue": "GitHub, giấy phép MIT; tài liệu tại microsoft.github.io/graphrag",
+    "url": "https://github.com/microsoft/graphrag",
+    "why": "Bản cài đặt chính thức; mô tả các chế độ Global, Local, DRIFT, Basic search và cảnh báo rằng lập chỉ mục có thể tốn kém, nên bắt đầu nhỏ và tinh chỉnh prompt."
+  },
+  "xu2024linkedin": {
+    "group": "Hướng nâng cao",
+    "kind": "Case study",
+    "authors": "Xu, Z., Cruz, M. J., Guevara, M., Wang, T., Deshpande, M., Wang, X., Li, Z.",
+    "year": "2024",
+    "title": "Retrieval-Augmented Generation with Knowledge Graphs for Customer Service Question Answering",
+    "short": "LinkedIn KG-RAG",
+    "venue": "ACM (DOI 10.1145/3626772.3661370), arXiv:2404.17723",
+    "url": "https://arxiv.org/abs/2404.17723",
+    "why": "Case study triển khai: đồ thị tri thức dựng từ phiếu hỗ trợ cũ; báo cáo MRR tăng 77,6% so với baseline và thời gian giải quyết trung vị giảm 28,6% sau khoảng sáu tháng dùng ở LinkedIn."
+  },
+  "magesh2024": {
+    "group": "Đánh giá và benchmark",
+    "kind": "Bài báo",
+    "authors": "Magesh, V., Surani, F., Dahl, M., Suzgun, M., Manning, C. D., Ho, D. E.",
+    "year": "2024",
+    "title": "Hallucination-Free? Assessing the Reliability of Leading AI Legal Research Tools",
+    "short": "Magesh et al. 2024 (công cụ pháp lý)",
+    "venue": "arXiv:2405.20362",
+    "url": "https://arxiv.org/abs/2405.20362",
+    "why": "Đánh giá có đăng ký trước các công cụ nghiên cứu pháp lý dùng RAG (Lexis+ AI, Westlaw AI-Assisted Research, Ask Practical Law AI): ảo giác 17–33%, thấp hơn GPT-4 nhưng vẫn đáng kể."
+  },
+  "xiong2024medrag": {
+    "group": "Đánh giá và benchmark",
+    "kind": "Benchmark",
+    "authors": "Xiong, G., Jin, Q., Lu, Z., Zhang, A.",
+    "year": "2024",
+    "title": "Benchmarking Retrieval-Augmented Generation for Medicine",
+    "short": "MIRAGE / MedRAG",
+    "venue": "arXiv:2402.13178",
+    "url": "https://arxiv.org/abs/2402.13178",
+    "why": "Benchmark MIRAGE (7.663 câu hỏi từ 5 bộ QA y khoa) và bộ công cụ MedRAG; RAG nâng độ chính xác của sáu LLM tới 18% so với chain-of-thought, kết hợp nhiều kho và bộ truy hồi cho kết quả tốt nhất."
+  }
+}

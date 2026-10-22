@@ -1,0 +1,222 @@
+{
+  "li2024selfroute": {
+    "group": "Context, generation và trích dẫn",
+    "kind": "Bài báo",
+    "authors": "Li, Z., Li, C., Zhang, M., Mei, Q., Bendersky, M.",
+    "year": "2024",
+    "title": "Retrieval Augmented Generation or Long-Context LLMs? A Comprehensive Study and Hybrid Approach",
+    "short": "Li et al. 2024 (Self-Route)",
+    "venue": "EMNLP 2024 Industry Track, arXiv:2407.16833",
+    "url": "https://arxiv.org/abs/2407.16833",
+    "why": "So sánh RAG với đưa nguyên văn bản vào ngữ cảnh dài trên LongBench và ∞Bench với Gemini-1.5-Pro, GPT-4o, GPT-3.5-Turbo; đề xuất Self-Route để mô hình tự chọn nhánh, giảm chi phí đáng kể mà giữ chất lượng gần với long-context."
+  },
+  "xu2023retrievallong": {
+    "group": "Context, generation và trích dẫn",
+    "kind": "Bài báo",
+    "authors": "Xu, P., Ping, W., Wu, X., et al.",
+    "year": "2023",
+    "title": "Retrieval meets Long Context Large Language Models",
+    "short": "Xu et al. 2023",
+    "venue": "ICLR 2024, arXiv:2310.03025",
+    "url": "https://arxiv.org/abs/2310.03025",
+    "why": "Trên mô hình GPT 43B nội bộ và Llama2-70B, truy hồi giúp cả mô hình cửa sổ ngắn lẫn cửa sổ dài; mô hình 4K có truy hồi đạt mức tương đương mô hình mở rộng lên 16K. Bằng chứng rằng RAG và ngữ cảnh dài bổ sung cho nhau."
+  },
+  "schick2023toolformer": {
+    "group": "Hướng nâng cao",
+    "kind": "Bài báo",
+    "authors": "Schick, T., Dwivedi-Yu, J., Dessì, R., et al.",
+    "year": "2023",
+    "title": "Toolformer: Language Models Can Teach Themselves to Use Tools",
+    "short": "Toolformer",
+    "venue": "arXiv:2302.04761",
+    "url": "https://arxiv.org/abs/2302.04761",
+    "why": "Một trong các công trình đầu cho thấy mô hình ngôn ngữ có thể học khi nào và cách nào gọi công cụ (máy tính, tìm kiếm, dịch, lịch). Nền tảng để hiểu nhánh “gọi công cụ” thay vì truy hồi văn bản."
+  },
+  "anthropic2024contextual": {
+    "group": "Retrieval và biểu diễn",
+    "kind": "Blog kỹ thuật",
+    "authors": "Anthropic",
+    "year": "2024",
+    "title": "Introducing Contextual Retrieval",
+    "short": "Anthropic Contextual Retrieval",
+    "venue": "Anthropic, 19/09/2024",
+    "url": "https://www.anthropic.com/news/contextual-retrieval",
+    "why": "Sinh 50–100 token ngữ cảnh cho mỗi chunk bằng LLM trước khi embedding và lập chỉ mục BM25; báo cáo giảm tỷ lệ truy hồi thất bại top-20 tới 49% (67% khi thêm reranker) trên bộ đánh giá nội bộ. Cũng gợi ý bỏ qua RAG khi kho dưới khoảng 200.000 token."
+  },
+  "chen2023densex": {
+    "group": "Retrieval và biểu diễn",
+    "kind": "Bài báo",
+    "authors": "Chen, T., Wang, H., Chen, S., et al.",
+    "year": "2023",
+    "title": "Dense X Retrieval: What Retrieval Granularity Should We Use?",
+    "short": "Dense X Retrieval",
+    "venue": "arXiv:2312.06648",
+    "url": "https://arxiv.org/abs/2312.06648",
+    "why": "Đề xuất “proposition” (mệnh đề nguyên tử) làm đơn vị lập chỉ mục; trên Wikipedia tiếng Anh và 5 bộ QA, proposition vượt passage, rõ nhất với bộ truy hồi không giám sát và thực thể ít phổ biến."
+  },
+  "sarthi2024raptor": {
+    "group": "Retrieval và biểu diễn",
+    "kind": "Bài báo",
+    "authors": "Sarthi, P., Abdullah, S., Tuli, A., Khanna, S., Goldie, A., Manning, C. D.",
+    "year": "2024",
+    "title": "RAPTOR: Recursive Abstractive Processing for Tree-Organized Retrieval",
+    "short": "RAPTOR",
+    "venue": "arXiv:2401.18059",
+    "url": "https://arxiv.org/abs/2401.18059",
+    "why": "Xây cây tóm tắt nhiều tầng bằng cách gom cụm và tóm tắt đệ quy các chunk; giúp các câu hỏi cần hiểu toàn bộ tài liệu dài, ví dụ trên QuALITY."
+  },
+  "gunther2024late": {
+    "group": "Retrieval và biểu diễn",
+    "kind": "Bài báo",
+    "authors": "Günther, M., Mohr, I., Williams, D. J., Wang, B., Xiao, H.",
+    "year": "2024",
+    "title": "Late Chunking: Contextual Chunk Embeddings Using Long-Context Embedding Models",
+    "short": "Late Chunking",
+    "venue": "arXiv:2409.04701",
+    "url": "https://arxiv.org/abs/2409.04701",
+    "why": "Mã hóa cả tài liệu bằng mô hình embedding ngữ cảnh dài rồi mới chia token thành chunk và mean-pool, để vector mỗi chunk mang ngữ cảnh xung quanh mà không cần huấn luyện thêm."
+  },
+  "smith2024chroma": {
+    "group": "Đánh giá và benchmark",
+    "kind": "Benchmark",
+    "authors": "Smith, B., Troynikov, A.",
+    "year": "2024",
+    "title": "Evaluating Chunking Strategies for Retrieval",
+    "short": "Chroma chunking report",
+    "venue": "Chroma Technical Report, 03/07/2024",
+    "url": "https://www.trychroma.com/research/evaluating-chunking",
+    "why": "Đánh giá chunking ở mức token (recall, precision, IoU) trên 5 kho văn bản tiếng Anh; cho thấy cấu hình mặc định phổ biến (800 token, overlap 400) có thể kém hiệu quả và lựa chọn chunking làm recall chênh tới khoảng 9%."
+  },
+  "theja2023chunksize": {
+    "group": "Đánh giá và benchmark",
+    "kind": "Blog kỹ thuật",
+    "authors": "Theja, R. (LlamaIndex)",
+    "year": "2023",
+    "title": "Evaluating the Ideal Chunk Size for a RAG System using LlamaIndex",
+    "short": "LlamaIndex chunk size",
+    "venue": "LlamaIndex Blog, 05/10/2023",
+    "url": "https://www.llamaindex.ai/blog/evaluating-the-ideal-chunk-size-for-a-rag-system-using-llamaindex-6207e5d3fec5",
+    "why": "Ví dụ quy trình đo chunk size (128–2048) bằng faithfulness, relevancy và thời gian phản hồi trên một báo cáo 10-K; giá trị chủ yếu ở phương pháp, không ở con số tối ưu."
+  },
+  "unicode-uax15": {
+    "group": "Tài liệu chính thức và mã nguồn",
+    "kind": "Tài liệu chính thức",
+    "authors": "Whistler, K. (ed.), The Unicode Consortium",
+    "year": "2026",
+    "title": "Unicode Standard Annex #15: Unicode Normalization Forms",
+    "short": "UAX #15",
+    "venue": "Unicode 18.0.0, Revision 58",
+    "url": "https://unicode.org/reports/tr15/",
+    "why": "Định nghĩa chuẩn của tương đương chính tắc và bốn dạng chuẩn hóa NFC, NFD, NFKC, NFKD — nền tảng để xử lý chữ tiếng Việt có dấu một cách nhất quán."
+  },
+  "python-unicodedata": {
+    "group": "Tài liệu chính thức và mã nguồn",
+    "kind": "Tài liệu chính thức",
+    "authors": "Python Software Foundation",
+    "year": "2026",
+    "title": "unicodedata — Unicode Database",
+    "short": "Python unicodedata",
+    "venue": "Python 3 documentation",
+    "url": "https://docs.python.org/3/library/unicodedata.html",
+    "why": "Tài liệu hàm unicodedata.normalize và is_normalized; lưu ý chính thức rằng hai chuỗi trông giống nhau có thể không bằng nhau nếu khác dạng chuẩn hóa."
+  },
+  "broder1997": {
+    "group": "Bài báo nền tảng",
+    "kind": "Bài báo",
+    "authors": "Broder, A. Z.",
+    "year": "1997",
+    "title": "On the resemblance and containment of documents",
+    "short": "Broder 1997",
+    "venue": "Compression and Complexity of SEQUENCES 1997",
+    "url": "https://doi.org/10.1109/SEQUEN.1997.666900",
+    "why": "Định nghĩa độ giống (resemblance) giữa hai tài liệu qua tập shingle và ước lượng bằng lấy mẫu ngẫu nhiên kích thước cố định — nền tảng của MinHash dùng để phát hiện tài liệu gần trùng."
+  },
+  "datasketch": {
+    "group": "Tài liệu chính thức và mã nguồn",
+    "kind": "Mã nguồn",
+    "authors": "Zhu, E., et al.",
+    "year": "2026",
+    "title": "datasketch: probabilistic data structures (MinHash, MinHash LSH, HyperLogLog…)",
+    "short": "datasketch",
+    "venue": "GitHub, giấy phép MIT",
+    "url": "https://github.com/ekzhu/datasketch",
+    "why": "Thư viện Python cài đặt MinHash, MinHash LSH và các cấu trúc liên quan; điểm khởi đầu thực tế cho khử trùng lặp gần đúng."
+  },
+  "auer2024docling": {
+    "group": "Tài liệu chính thức và mã nguồn",
+    "kind": "Mã nguồn",
+    "authors": "Auer, C., Lysak, M., Nassar, A., et al.",
+    "year": "2024",
+    "title": "Docling Technical Report",
+    "short": "Docling",
+    "venue": "arXiv:2408.09869; mã nguồn github.com/docling-project/docling",
+    "url": "https://arxiv.org/abs/2408.09869",
+    "why": "Bộ công cụ mã nguồn mở chuyển PDF, DOCX, PPTX, XLSX, HTML, ảnh… thành biểu diễn có cấu trúc: bố cục, thứ tự đọc, cấu trúc bảng, OCR."
+  },
+  "unstructured": {
+    "group": "Tài liệu chính thức và mã nguồn",
+    "kind": "Mã nguồn",
+    "authors": "Unstructured-IO",
+    "year": "2026",
+    "title": "unstructured: open-source ETL for transforming complex documents into clean, structured formats for language models",
+    "short": "unstructured",
+    "venue": "GitHub, giấy phép Apache-2.0",
+    "url": "https://github.com/Unstructured-IO/unstructured",
+    "why": "Thư viện Python chia tài liệu (PDF, HTML, Word, PowerPoint, email…) thành các phần tử có loại; cần cài thêm tesseract, poppler, LibreOffice cho một số định dạng."
+  },
+  "barbaresi2021trafilatura": {
+    "group": "Tài liệu chính thức và mã nguồn",
+    "kind": "Mã nguồn",
+    "authors": "Barbaresi, A.",
+    "year": "2021",
+    "title": "Trafilatura: A Web Scraping Library and Command-Line Tool for Text Discovery and Extraction",
+    "short": "Trafilatura",
+    "venue": "ACL-IJCNLP 2021 System Demonstrations",
+    "url": "https://aclanthology.org/2021.acl-demo.15/",
+    "why": "Công cụ mã nguồn mở trích phần nội dung chính, bình luận và metadata từ trang web, loại bỏ menu, quảng cáo và phần lặp."
+  },
+  "presidio": {
+    "group": "Tài liệu chính thức và mã nguồn",
+    "kind": "Mã nguồn",
+    "authors": "Microsoft / Presidio contributors",
+    "year": "2026",
+    "title": "Presidio: Data Protection and De-identification SDK",
+    "short": "Presidio",
+    "venue": "GitHub, giấy phép MIT",
+    "url": "https://github.com/microsoft/presidio",
+    "why": "SDK phát hiện và ẩn danh hóa PII trong văn bản và ảnh bằng NER, biểu thức chính quy, checksum; chính tài liệu dự án lưu ý không đảm bảo tìm thấy mọi thông tin nhạy cảm."
+  },
+  "vu2018vncorenlp": {
+    "group": "Tài liệu chính thức và mã nguồn",
+    "kind": "Mã nguồn",
+    "authors": "Vu, T., Nguyen, D. Q., Nguyen, D. Q., Dras, M., Johnson, M.",
+    "year": "2018",
+    "title": "VnCoreNLP: A Vietnamese Natural Language Processing Toolkit",
+    "short": "VnCoreNLP",
+    "venue": "NAACL 2018 Demonstrations, arXiv:1801.01331",
+    "url": "https://arxiv.org/abs/1801.01331",
+    "why": "Bộ công cụ xử lý tiếng Việt gồm tách từ, gán nhãn từ loại, nhận dạng thực thể và phân tích phụ thuộc; hữu ích khi cần tách từ thay vì tách âm tiết."
+  },
+  "nogueira2019doc2query": {
+    "group": "Retrieval và biểu diễn",
+    "kind": "Bài báo",
+    "authors": "Nogueira, R., Yang, W., Lin, J., Cho, K.",
+    "year": "2019",
+    "title": "Document Expansion by Query Prediction",
+    "short": "doc2query",
+    "venue": "arXiv:1904.08375",
+    "url": "https://arxiv.org/abs/1904.08375",
+    "why": "Sinh các câu hỏi mà một tài liệu có thể trả lời rồi nối vào tài liệu trước khi lập chỉ mục — tiền thân của kỹ thuật lập chỉ mục bằng “câu hỏi giả định”."
+  },
+  "faysse2024colpali": {
+    "group": "Retrieval và biểu diễn",
+    "kind": "Bài báo",
+    "authors": "Faysse, M., Sibille, H., Wu, T., et al.",
+    "year": "2024",
+    "title": "ColPali: Efficient Document Retrieval with Vision Language Models",
+    "short": "ColPali",
+    "venue": "ICLR 2025, arXiv:2407.01449",
+    "url": "https://arxiv.org/abs/2407.01449",
+    "why": "Embedding trực tiếp ảnh trang tài liệu bằng mô hình thị giác–ngôn ngữ (multi-vector, late interaction) thay vì trích văn bản; kèm benchmark ViDoRe cho tài liệu giàu hình ảnh, bảng biểu."
+  }
+}

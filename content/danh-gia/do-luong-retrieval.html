@@ -1,0 +1,208 @@
+---
+{
+  "title": "Đo chất lượng retrieval: Recall@k, MRR hay nDCG?",
+  "navTitle": "Đo lường retrieval",
+  "description": "Xây bộ kiểm thử truy hồi từ câu hỏi thật, gán nhãn tài liệu liên quan, hiểu và tính tay Hit@k, Recall@k, Precision@k, MRR, nDCG, MAP; thận trọng thống kê và khác biệt giữa đo ngoại tuyến với trực tuyến.",
+  "lead": "Nếu tài liệu đúng không lọt vào ngữ cảnh, LLM giỏi đến mấy cũng không trả lời đúng được. Đo truy hồi tách riêng khỏi đo câu trả lời giúp bạn biết lỗi nằm ở đâu và cải tiến nào thật sự có tác dụng. Bài này đi từ cách xây bộ dữ liệu kiểm thử, qua từng chỉ số với ví dụ tính tay, tới những bẫy thống kê khi so hai hệ thống.",
+  "level": "Trung cấp",
+  "reviewed": "2026-10-22",
+  "kinds": ["nen-tang", "nghien-cuu", "kinh-nghiem", "nhan-dinh"]
+}
+---
+<div class="callout tom-tat">
+<ul>
+<li>Đo retrieval cần ba thứ: <strong>tập truy vấn</strong> giống người dùng thật, <strong>nhãn liên quan</strong> (qrels) cho từng truy vấn, và <strong>chỉ số</strong> phù hợp với cách kết quả được dùng.</li>
+<li>Với RAG, câu hỏi chính thường là “tài liệu cần thiết có nằm trong top-k đưa vào prompt không?” → <strong>Recall@k</strong> và <strong>Hit@k</strong> là chỉ số đầu tiên nên nhìn. <strong>MRR</strong> và <strong>nDCG</strong> bổ sung thông tin về <em>thứ tự</em>.</li>
+<li>Câu hỏi sinh tự động bằng LLM rẻ nhưng có thiên lệch (trùng từ với đoạn nguồn, quá “sạch”, chỉ cần một đoạn); nên trộn với câu hỏi thật.</li>
+<li>Bộ kiểm thử nhỏ cho khoảng tin cậy rộng: với 50 câu, một chỉ số tỷ lệ quanh 0,7 có biên sai số khoảng ±0,13. Chênh lệch 3 điểm giữa hai cấu hình thường chưa nói lên điều gì.</li>
+</ul>
+</div>
+
+<h2>Vì sao đo retrieval riêng?</h2>
+<p>Một câu trả lời sai có thể do nhiều khâu: tài liệu không có trong kho, có nhưng không được truy hồi, được truy hồi nhưng bị loại khi ghép ngữ cảnh, hoặc nằm trong ngữ cảnh mà mô hình không dùng. Barnett và cộng sự, tổng kết từ ba hệ thống RAG thực tế, xếp “bỏ sót tài liệu xếp hạng cao” (đáp án có trong kho nhưng không lọt top-k) là một trong bảy điểm lỗi chính[[cite:barnett2024]]. Nếu chỉ đo câu trả lời cuối, bạn thấy <em>có</em> lỗi nhưng không thấy lỗi <em>ở đâu</em>.</p>
+<p>Đo retrieval riêng còn có lợi thế thực tế: nó <strong>rẻ và tất định</strong>. Không cần gọi LLM sinh câu trả lời, không cần giám khảo; chỉ cần so danh sách mã tài liệu với nhãn. Bạn có thể chạy hàng trăm cấu hình (kích thước chunk, mô hình embedding, trọng số hybrid, reranker) trong vài phút. Cách đo câu trả lời được trình bày ở [[link:danh-gia/danh-gia-generation]]; cách phối hợp hai loại số đo để chẩn đoán ở [[link:danh-gia/chan-doan-loi]].</p>
+
+<h2>Xây bộ dữ liệu kiểm thử</h2>
+<h3>Nguồn câu hỏi</h3>
+<table>
+<thead><tr><th>Nguồn</th><th>Ưu điểm</th><th>Nhược điểm</th></tr></thead>
+<tbody>
+<tr><td>Log truy vấn thật (sau khi ẩn danh)</td><td>Phản ánh đúng cách người dùng hỏi: viết tắt, không dấu, sai chính tả, câu mơ hồ</td><td>Chỉ có khi hệ thống đã chạy; cần xử lý dữ liệu cá nhân</td></tr>
+<tr><td>Câu hỏi từ chuyên gia nghiệp vụ, tổng đài, FAQ hiện có</td><td>Có sẵn đáp án và tài liệu nguồn; bao phủ các câu “phải đúng”</td><td>Thường quá chuẩn mực so với người dùng thật</td></tr>
+<tr><td>Câu hỏi sinh bằng LLM từ chunk</td><td>Nhanh, rẻ, biết sẵn chunk đúng</td><td>Thiên lệch (xem dưới); dễ tạo ảo giác “hệ thống rất tốt”</td></tr>
+</tbody>
+</table>
+<div class="callout kinh-nghiem">
+<p><strong>Thiên lệch của câu hỏi sinh tự động.</strong> Khi đưa một chunk cho LLM và yêu cầu “viết câu hỏi mà đoạn này trả lời”, câu hỏi nhận được thường: (1) <em>dùng lại từ ngữ của chính đoạn đó</em>, làm BM25 và chính chunk đó được lợi bất thường; (2) chỉ cần đúng một chunk để trả lời, không có câu hỏi nhiều bước; (3) không có câu hỏi không trả lời được; (4) viết chuẩn chính tả, có dấu đầy đủ — trong khi người dùng Việt Nam hay gõ không dấu hoặc viết tắt (“ck lien ngan hang mat phi ko”). Một bộ kiểm thử toàn câu sinh tự động có thể cho Recall@5 rất cao rồi sụp khi gặp người dùng thật. Thực hành phổ biến: dùng câu sinh tự động để mở rộng độ phủ, nhưng giữ một tập lõi câu hỏi thật hoặc do người viết, và báo cáo chỉ số riêng cho từng nguồn.</p>
+</div>
+<p>Một số mẹo khi sinh câu hỏi: yêu cầu LLM viết theo giọng người dùng (có ví dụ câu thật), cấm dùng lại cụm từ dài trong đoạn, sinh cả câu cần hai đoạn, và cho người lọc lại một mẫu.</p>
+
+<h3>Gán nhãn liên quan</h3>
+<p><strong>Qrels</strong> (relevance judgments — nhãn liên quan) cho biết, với mỗi truy vấn, tài liệu nào là liên quan. Các quyết định quan trọng:</p>
+<ul>
+<li><strong>Đơn vị nhãn</strong>: nhãn theo <em>chunk id</em> rất tiện nhưng vỡ ngay khi bạn đổi cách chunking — chunk cũ không còn tồn tại. Bền hơn là gán nhãn theo <em>tài liệu + vị trí</em> (doc_id và khoảng ký tự hoặc mục), rồi coi một chunk là liên quan nếu nó phủ đủ phần đó. Một cách thực dụng khác: lưu <em>đoạn văn đáp án</em> và coi chunk chứa đoạn đó là liên quan.</li>
+<li><strong>Nhị phân hay nhiều bậc</strong>: nhị phân (liên quan / không) dễ gán, đủ cho Recall@k. Nhiều bậc (ví dụ 0 = không liên quan, 1 = một phần, 2 = liên quan, 3 = trả lời đầy đủ) cần cho nDCG có ý nghĩa và hữu ích khi nhiều đoạn chỉ đúng một nửa.</li>
+<li><strong>Độ đầy đủ</strong>: hầu như không thể gán nhãn mọi chunk trong kho. Cách thường dùng là gán nhãn trên <em>hợp các top-k</em> của nhiều hệ thống khác nhau; chunk chưa được gán nhãn mặc định bị coi là không liên quan. Hệ quả: một hệ thống mới tìm được tài liệu đúng mà chưa ai gán nhãn sẽ bị chấm oan. Khi thử cấu hình mới, hãy gán nhãn bổ sung những chunk mới xuất hiện trong top-k.</li>
+<li><strong>Hướng dẫn gán nhãn viết thành văn</strong>: “liên quan” nghĩa là chứa thông tin cần để trả lời, không phải “cùng chủ đề”. Cho hai người gán chung 30–50 câu đầu tiên để thống nhất tiêu chí.</li>
+</ul>
+<div class="callout kinh-nghiem">
+<p>Quy mô khởi đầu thường gặp là 50–200 truy vấn có nhãn — đủ để phát hiện thay đổi lớn và để đọc từng lỗi bằng mắt. Đây là điểm khởi đầu, không phải mức “đủ”; mục thống kê bên dưới cho thấy vì sao bộ nhỏ chỉ phát hiện được chênh lệch lớn.</p>
+</div>
+
+<h2>Các chỉ số, từ đơn giản tới tinh tế</h2>
+<p>Ký hiệu: với một truy vấn, hệ thống trả về danh sách xếp hạng; <em>R</em> là số tài liệu liên quan theo nhãn; <em>k</em> là số kết quả đầu được xét.</p>
+<table>
+<thead><tr><th>Chỉ số</th><th>Công thức (một truy vấn)</th><th>Trả lời câu hỏi</th><th>Quan tâm thứ tự?</th></tr></thead>
+<tbody>
+<tr><td>Hit@k (Success@k)</td><td>1 nếu có ít nhất một tài liệu liên quan trong top-k, ngược lại 0</td><td>“Có tìm được cái gì dùng được không?”</td><td>Không (trong top-k)</td></tr>
+<tr><td>Recall@k</td><td>(số liên quan trong top-k) / R</td><td>“Tìm được bao nhiêu phần thông tin cần?”</td><td>Không</td></tr>
+<tr><td>Precision@k</td><td>(số liên quan trong top-k) / k</td><td>“Ngữ cảnh có bao nhiêu phần là nhiễu?”</td><td>Không</td></tr>
+<tr><td>Reciprocal Rank → MRR</td><td>1 / hạng của tài liệu liên quan đầu tiên (0 nếu không có); MRR = trung bình trên các truy vấn</td><td>“Kết quả đúng đầu tiên xuất hiện sớm tới đâu?”</td><td>Có, chỉ với tài liệu đúng đầu tiên</td></tr>
+<tr><td>nDCG@k</td><td>DCG@k / DCG@k lý tưởng; DCG = Σ gain(i) / log₂(i+1)</td><td>“Tài liệu tốt có được xếp lên trên không?” (hỗ trợ nhiều bậc)</td><td>Có, mọi vị trí</td></tr>
+<tr><td>AP → MAP</td><td>Trung bình Precision@i tại các vị trí i có tài liệu liên quan, chia cho R</td><td>Tổng hợp precision và recall theo thứ tự</td><td>Có</td></tr>
+</tbody>
+</table>
+
+<h3>Ví dụ tính tay</h3>
+<p>Truy vấn: <em>“Hoàn tiền đơn COD mất bao lâu?”</em> trên kho chính sách của một sàn thương mại điện tử. Nhãn: ba chunk liên quan {D1, D2, D5}. Hệ thống trả về theo thứ tự: D4, D2, D9, D1, D7, D3. D5 không có trong danh sách.</p>
+<table>
+<thead><tr><th>Hạng i</th><th>Tài liệu</th><th>Liên quan?</th><th>Chiết khấu 1/log₂(i+1)</th><th>Precision@i</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>D4</td><td>—</td><td>1,000</td><td>0/1</td></tr>
+<tr><td>2</td><td>D2</td><td>✓</td><td>0,631</td><td>1/2</td></tr>
+<tr><td>3</td><td>D9</td><td>—</td><td>0,500</td><td>1/3</td></tr>
+<tr><td>4</td><td>D1</td><td>✓</td><td>0,431</td><td>2/4</td></tr>
+<tr><td>5</td><td>D7</td><td>—</td><td>0,387</td><td>2/5</td></tr>
+</tbody>
+</table>
+<p>Với k = 5:</p>
+<ul>
+<li><strong>Hit@5</strong> = 1 (có D2, D1).</li>
+<li><strong>Recall@5</strong> = 2 / 3 ≈ <strong>0,667</strong>. Một phần ba thông tin cần (D5) không bao giờ tới được LLM.</li>
+<li><strong>Precision@5</strong> = 2 / 5 = <strong>0,400</strong>. Ba trên năm chunk đưa vào prompt là nhiễu.</li>
+<li><strong>Reciprocal rank</strong> = 1 / 2 = <strong>0,500</strong> (tài liệu đúng đầu tiên ở hạng 2).</li>
+<li><strong>nDCG@5</strong>: DCG = 0,631 + 0,431 = 1,062. DCG lý tưởng (ba tài liệu đúng ở hạng 1–3) = 1 + 0,631 + 0,500 = 2,131. nDCG@5 = 1,062 / 2,131 ≈ <strong>0,498</strong>.</li>
+<li><strong>AP</strong> (không cắt k): Precision tại hạng 2 là 1/2, tại hạng 4 là 2/4; D5 không được tìm thấy đóng góp 0. AP = (0,5 + 0,5) / 3 ≈ <strong>0,333</strong>.</li>
+</ul>
+<p>Nếu chỉ lấy k = 3 (D4, D2, D9): Recall@3 = 1/3 ≈ 0,333, Precision@3 = 1/3, nDCG@3 = 0,631 / 2,131 ≈ 0,296. Cùng một bảng xếp hạng, chọn k khác cho câu chuyện khác — k trong chỉ số nên bằng đúng số chunk bạn thật sự đưa vào prompt.</p>
+
+<h3>MRR trên nhiều truy vấn</h3>
+<p>MRR là trung bình reciprocal rank. Với bốn truy vấn có tài liệu đúng đầu tiên ở hạng 2, 1, không có trong top-10, và 3: MRR = (0,5 + 1 + 0 + 0,333) / 4 ≈ <strong>0,458</strong>. MRR phù hợp khi chỉ cần <em>một</em> đoạn đúng (câu hỏi dạng tra cứu sự kiện); nó bỏ qua hoàn toàn các tài liệu đúng thứ hai, thứ ba — điều quan trọng với câu hỏi cần tổng hợp nhiều nguồn.</p>
+
+<h3>Mức liên quan nhiều bậc và nDCG</h3>
+<div class="callout nen-tang">
+<p>Họ chỉ số cumulated gain (CG, DCG, nDCG) được Järvelin và Kekäläinen đề xuất năm 2002 để đánh giá với nhãn liên quan nhiều bậc: tài liệu rất liên quan đóng góp nhiều “lợi ích” (gain) hơn, và đóng góp bị chiết khấu dần theo vị trí vì người dùng ít đọc tới cuối danh sách. Chuẩn hóa bằng DCG của thứ tự lý tưởng cho giá trị trong khoảng 0–1, so sánh được giữa các truy vấn[[cite:jarvelin2002]]. Dạng hay dùng hiện nay là chiết khấu 1/log₂(i+1); một biến thể phổ biến khác dùng gain = 2<sup>rel</sup> − 1 để nhấn mạnh tài liệu rất liên quan. Các thư viện có thể dùng biến thể khác nhau — hãy kiểm tra trước khi so số giữa hai công cụ.</p>
+</div>
+<p>Quay lại ví dụ trên, giờ gán nhãn nhiều bậc: D5 = 3 (trả lời đầy đủ: “5–7 ngày làm việc, chuyển khoản vào tài khoản khách cung cấp”), D2 = 2 (nói quy trình hoàn tiền chung), D1 = 1 (nhắc tới COD nhưng không nói thời gian). Dùng gain tuyến tính:</p>
+<ul>
+<li>DCG@5 = 2 × 0,631 (D2 ở hạng 2) + 1 × 0,431 (D1 ở hạng 4) = 1,262 + 0,431 = 1,693.</li>
+<li>DCG lý tưởng (3, 2, 1 ở hạng 1–3) = 3 × 1 + 2 × 0,631 + 1 × 0,5 = 4,762.</li>
+<li>nDCG@5 ≈ 1,693 / 4,762 ≈ <strong>0,355</strong> — thấp hơn bản nhị phân (0,498) vì tài liệu <em>tốt nhất</em> (D5) bị bỏ sót hoàn toàn. Nhãn nhiều bậc làm lộ ra điều mà nhãn nhị phân che mất.</li>
+</ul>
+
+<h2>Thử với công cụ tương tác</h2>
+<p>Công cụ dưới đây tính Hit@k, Recall@k, Precision@k, reciprocal rank và nDCG@k cho <strong>một truy vấn</strong> với nhãn nhị phân. Giá trị mặc định là đúng ví dụ ở trên, nên bạn có thể đối chiếu từng con số. Hãy thử:</p>
+<ul>
+<li>Đưa D5 lên đầu danh sách: Recall@5 lên 1,0 và nDCG@5 tăng mạnh.</li>
+<li>Đổi chỗ D4 và D2: Recall, Precision không đổi nhưng reciprocal rank lên 1,0 và nDCG tăng — chỉ số theo thứ tự “thấy” được việc rerank, chỉ số tập hợp thì không.</li>
+<li>Kéo k từ 1 tới 10 và xem Precision@k giảm dần khi danh sách hết tài liệu đúng.</li>
+</ul>
+<div class="widget" data-widget="metrics"><p>Bật JavaScript để dùng công cụ tương tác.</p></div>
+
+<h2>Context precision và context recall</h2>
+<p>Các framework đánh giá RAG đặt tên chỉ số theo góc nhìn “ngữ cảnh”. Cần đọc kỹ định nghĩa vì cùng tên có thể khác nghĩa so với chỉ số IR cổ điển:</p>
+<ul>
+<li>Trong tài liệu Ragas (bản stable, tính đến 10/2026), <strong>context precision</strong> được tính có trọng số theo hạng: trung bình Precision@k tại các vị trí có chunk liên quan, trong top-K — về bản chất gần với AP tính trên top-K, không phải Precision@k đơn thuần. Việc xác định “liên quan” có thể do LLM so với đáp án tham chiếu, so khớp chuỗi với ngữ cảnh tham chiếu, hoặc so khớp mã tài liệu[[cite:ragas2025context]].</li>
+<li><strong>Context recall</strong> trong Ragas có biến thể dùng LLM: tách đáp án tham chiếu thành các nhận định rồi kiểm tra nhận định nào quy được về ngữ cảnh truy hồi; và biến thể so khớp mã tài liệu, tương đương Recall với nhãn theo ID[[cite:ragas2025context]].</li>
+</ul>
+<div class="callout nhan-dinh">
+<p>Chúng tôi khuyên ưu tiên các chỉ số dựa trên <em>nhãn mã tài liệu</em> (Recall@k, nDCG@k) khi có thể: chúng tất định, rẻ, và không phụ thuộc chất lượng tiếng Việt của một LLM giám khảo. Các biến thể dùng LLM hữu ích khi chỉ có đáp án tham chiếu mà không có nhãn tài liệu — nhưng khi đó chỉ số đo cả bộ truy hồi lẫn giám khảo, và cần hiệu chỉnh giám khảo như mô tả ở [[link:danh-gia/danh-gia-generation]].</p>
+</div>
+
+<h2>Chọn chỉ số nào cho RAG?</h2>
+<table>
+<thead><tr><th>Tình huống</th><th>Chỉ số chính</th><th>Lý do</th></tr></thead>
+<tbody>
+<tr><td>Câu hỏi tra cứu một sự kiện (“hạn nộp hồ sơ là ngày nào?”)</td><td>Hit@k, MRR</td><td>Một đoạn đúng là đủ; muốn nó xuất hiện sớm</td></tr>
+<tr><td>Câu hỏi cần tổng hợp nhiều đoạn (“so sánh ba gói bảo hiểm”)</td><td>Recall@k</td><td>Thiếu một đoạn là câu trả lời thiếu</td></tr>
+<tr><td>So sánh reranker</td><td>nDCG@k (k = số chunk đưa vào prompt), MRR</td><td>Reranker không đổi tập ứng viên, chỉ đổi thứ tự</td></tr>
+<tr><td>So sánh giai đoạn truy hồi ứng viên (trước rerank)</td><td>Recall@N với N lớn (50–100)</td><td>Reranker chỉ sắp lại được những gì đã được lấy về</td></tr>
+<tr><td>Kiểm soát nhiễu và chi phí ngữ cảnh</td><td>Precision@k</td><td>Đoạn không liên quan tốn token và có thể gây nhiễu</td></tr>
+</tbody>
+</table>
+<p>Thực tế thường theo dõi một cặp: <strong>Recall@N</strong> cho giai đoạn lấy ứng viên (xem [[link:tim-kiem/hybrid-search]]) và <strong>nDCG@k hoặc Recall@k</strong> sau rerank (xem [[link:tim-kiem/reranking]]).</p>
+
+<h2>Thận trọng thống kê</h2>
+<h3>Bộ nhỏ, sai số lớn</h3>
+<p>Một chỉ số trung bình trên 50 truy vấn là một <em>ước lượng</em>, không phải sự thật. Với chỉ số dạng tỷ lệ như Hit@k, sai số chuẩn xấp xỉ √(p(1−p)/n). Nếu Hit@5 = 0,70 trên n = 50 câu: √(0,7 × 0,3 / 50) ≈ 0,065, khoảng tin cậy 95% xấp xỉ 0,70 ± 0,13, tức từ khoảng 0,57 tới 0,83. Với n = 200, biên thu hẹp còn khoảng ±0,06. Nói cách khác: với 50 câu, một “cải tiến” từ 0,70 lên 0,73 hoàn toàn có thể là ngẫu nhiên.</p>
+
+<h3>So sánh có ghép cặp và bootstrap</h3>
+<p>Khi so hai cấu hình A và B, hãy chạy <em>cùng một bộ truy vấn</em> và phân tích <em>chênh lệch theo từng truy vấn</em> (so sánh ghép cặp). Cách này loại bỏ phần lớn biến động do độ khó khác nhau giữa các câu hỏi. Một quy trình đơn giản là bootstrap:</p>
+<pre><code>import random
+
+def bootstrap_diff(scores_a, scores_b, n_iter=10000, seed=0):
+    """scores_a[i], scores_b[i]: chỉ số của truy vấn i dưới cấu hình A và B."""
+    rng = random.Random(seed)
+    diffs = [b - a for a, b in zip(scores_a, scores_b)]
+    n = len(diffs)
+    means = []
+    for _ in range(n_iter):
+        sample = [diffs[rng.randrange(n)] for _ in range(n)]
+        means.append(sum(sample) / n)
+    means.sort()
+    lo, hi = means[int(0.025 * n_iter)], means[int(0.975 * n_iter)]
+    return sum(diffs) / n, (lo, hi)   # chênh lệch trung bình và khoảng 95%
+
+# Nếu khoảng (lo, hi) chứa 0, chưa đủ bằng chứng B tốt hơn A.</code></pre>
+<div class="callout nghien-cuu">
+<p>Smucker, Allan và Carterette (CIKM 2007) so sánh năm kiểm định ý nghĩa thống kê trên các run nộp cho TREC, với chỉ số MAP. Kiểm định randomization, bootstrap và t-test ghép cặp cho kết luận gần như nhau; Wilcoxon và sign test kém tin cậy hơn và các tác giả khuyến nghị ngừng dùng chúng cho việc so trung bình[[cite:smucker2007]]. Bối cảnh là các bộ TREC với hàng chục truy vấn và nhãn chuyên gia; với bộ kiểm thử RAG tự xây, nguyên tắc “dùng kiểm định ghép cặp, báo khoảng tin cậy” vẫn áp dụng.</p>
+</div>
+
+<h3>Những bẫy khác</h3>
+<ul>
+<li><strong>Tối ưu quá mức trên bộ kiểm thử</strong>: thử 40 cấu hình rồi chọn cái tốt nhất trên cùng 100 câu, điểm cao nhất đó lạc quan hơn thực tế. Tách một phần làm tập “khóa” chỉ chạy khi chốt cấu hình.</li>
+<li><strong>Trộn các nhóm câu hỏi</strong>: chỉ số trung bình che mất nhóm yếu. Báo cáo theo nhóm (tra cứu / tổng hợp / không dấu / nhiều bước).</li>
+<li><strong>Nhãn lỗi thời</strong>: tài liệu cập nhật, nhãn cũ chỉ vào văn bản hết hiệu lực. Gắn ngày rà soát cho bộ nhãn.</li>
+<li><strong>So số giữa các thư viện</strong>: nDCG, MAP có biến thể; cách xử lý tài liệu trùng hạng, truy vấn không có tài liệu liên quan có thể khác nhau.</li>
+</ul>
+
+<h2>Công cụ tính chỉ số</h2>
+<p>Không nên tự cài lại công thức khi có công cụ đã được kiểm chứng (tính đến 10/2026):</p>
+<ul>
+<li><strong>trec_eval</strong>: công cụ chuẩn của cộng đồng TREC, viết bằng C, đọc file nhãn (qrels) và file kết quả (run), tính MAP, nDCG, precision, recall, bpref…[[cite:nist2008treceval]]</li>
+<li><strong>pytrec_eval</strong>: giao diện Python gọi trực tiếp trec_eval, phù hợp khi pipeline viết bằng Python[[cite:vangysel2018]].</li>
+<li><strong>ranx</strong>: thư viện Python tính Hit Rate, Precision, Recall, MRR, MAP, nDCG…, có sẵn kiểm định ý nghĩa thống kê (t-test ghép cặp, Fisher randomization) khi so nhiều run, và các phương pháp hợp nhất kết quả như RRF; README ghi đã đối chiếu với trec_eval[[cite:bassani2022ranx]].</li>
+</ul>
+<p>Dù dùng công cụ nào, hãy chạy thử trên ví dụ tính tay ở trên để chắc bạn hiểu đúng cách nó định nghĩa từng chỉ số.</p>
+
+<h2>Ngoại tuyến và trực tuyến</h2>
+<p>Mọi chỉ số ở trên là <strong>ngoại tuyến</strong> (offline): đo trên bộ kiểm thử cố định trước khi phát hành. Khi hệ thống đã chạy, có thêm tín hiệu <strong>trực tuyến</strong> (online):</p>
+<table>
+<thead><tr><th>Tín hiệu trực tuyến</th><th>Gợi ý gì về retrieval</th><th>Lưu ý</th></tr></thead>
+<tbody>
+<tr><td>Tỷ lệ câu trả lời “không tìm thấy”</td><td>Thiếu nội dung hoặc truy hồi kém</td><td>Cần đọc mẫu để tách hai nguyên nhân</td></tr>
+<tr><td>Người dùng hỏi lại ngay bằng cách diễn đạt khác</td><td>Lần truy hồi đầu không đúng ý</td><td>Cũng có thể do câu trả lời quá dài hoặc khó hiểu</td></tr>
+<tr><td>Tỷ lệ bấm vào trích dẫn, phản hồi “nguồn không liên quan”</td><td>Chất lượng nguồn được dẫn</td><td>Nhiễu, thiên về người dùng tích cực</td></tr>
+<tr><td>Chuyển sang nhân viên hỗ trợ</td><td>Câu hỏi không được giải quyết</td><td>Tín hiệu muộn, gộp mọi loại lỗi</td></tr>
+</tbody>
+</table>
+<p>Tín hiệu trực tuyến cho biết <em>có</em> vấn đề; bộ kiểm thử ngoại tuyến cho biết <em>vấn đề nằm ở đâu</em> và sửa có hiệu quả không. Vòng lặp tốt là: lấy mẫu truy vấn thật có tín hiệu xấu → gán nhãn → đưa vào bộ kiểm thử → sửa → đo lại. Quy trình chi tiết ở [[link:danh-gia/chan-doan-loi]].</p>
+
+<h2>Cách kiểm chứng</h2>
+<div class="callout kiem-chung">
+<ol>
+<li>Tự tính tay Recall@3, nDCG@3 và AP cho ví dụ trong bài khi D5 được đưa lên hạng 3 (thay D9), rồi kiểm tra bằng công cụ tương tác. (Đáp án: Recall@3 = 2/3; nDCG@3 = (0,631 + 0,5) / 2,131 ≈ 0,531; AP = (1/2 + 2/3 + 3/4) / 3 ≈ 0,639.)</li>
+<li>Với bộ kiểm thử của bạn, tính khoảng tin cậy của chỉ số chính. Nếu biên rộng hơn mức cải tiến bạn đang theo đuổi, cần thêm câu hỏi trước khi tối ưu tiếp.</li>
+<li>Tách chỉ số theo nguồn câu hỏi (thật / sinh tự động). Nếu chênh nhau lớn, câu sinh tự động đang làm bạn lạc quan.</li>
+<li>Đổi cách chunking và kiểm tra nhãn có còn dùng được không. Nếu không, chuyển sang nhãn theo tài liệu + vị trí.</li>
+</ol>
+</div>
+
+<h2>Đọc tiếp</h2>
+<ul>
+<li>Bài tiếp theo: [[link:danh-gia/danh-gia-generation]] — đo câu trả lời: faithfulness, answer relevance, LLM-as-a-judge.</li>
+<li>Dùng chỉ số retrieval để định vị lỗi: [[link:danh-gia/chan-doan-loi]].</li>
+<li>Những thành phần bạn sẽ tối ưu bằng các chỉ số này: [[link:du-lieu/chunking]], [[link:truy-hoi/embedding]], [[link:tim-kiem/hybrid-search]], [[link:tim-kiem/reranking]].</li>
+<li>Benchmark truy hồi công khai và giới hạn của chúng: BEIR[[cite:thakur2021]], MTEB[[cite:muennighoff2022]] — xem thêm ở [[link:truy-hoi/embedding]].</li>
+<li>Bài báo gốc của nDCG[[cite:jarvelin2002]].</li>
+</ul>

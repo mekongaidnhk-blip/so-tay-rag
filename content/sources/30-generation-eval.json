@@ -1,0 +1,189 @@
+{
+  "xu2023recomp": {
+    "group": "Context, generation và trích dẫn",
+    "kind": "Bài báo",
+    "authors": "Xu, F., Shi, W., Choi, E.",
+    "year": "2023",
+    "title": "RECOMP: Improving Retrieval-Augmented LMs with Compression and Selective Augmentation",
+    "short": "RECOMP",
+    "venue": "arXiv:2310.04408",
+    "url": "https://arxiv.org/abs/2310.04408",
+    "why": "Nén tài liệu truy hồi thành tóm tắt trước khi đưa vào LM, bằng bộ nén trích xuất (chọn câu) hoặc trừu tượng (viết tóm tắt); có thể trả về chuỗi rỗng khi tài liệu không giúp ích. Đọc để hiểu ý tưởng “nén có chọn lọc”."
+  },
+  "jiang2023longllmlingua": {
+    "group": "Context, generation và trích dẫn",
+    "kind": "Bài báo",
+    "authors": "Jiang, H., Wu, Q., Luo, X., Li, D., Lin, C.-Y., Yang, Y., Qiu, L.",
+    "year": "2023",
+    "title": "LongLLMLingua: Accelerating and Enhancing LLMs in Long Context Scenarios via Prompt Compression",
+    "short": "LongLLMLingua",
+    "venue": "ACL 2024, arXiv:2310.06839",
+    "url": "https://arxiv.org/abs/2310.06839",
+    "why": "Nén prompt ở mức token, có tính tới câu hỏi và vị trí thông tin; báo cáo giảm token và độ trễ trên NaturalQuestions, LooGLE với GPT-3.5-Turbo. Có mã nguồn công khai."
+  },
+  "anthropic2026prompting": {
+    "group": "Tài liệu chính thức và mã nguồn",
+    "kind": "Tài liệu chính thức",
+    "authors": "Anthropic",
+    "year": "2026",
+    "title": "Prompting best practices (mục Long context prompting)",
+    "short": "Anthropic — Prompting best practices",
+    "venue": "Tài liệu Claude Platform, truy cập 10/2026",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices",
+    "why": "Hướng dẫn của nhà cung cấp mô hình: đặt tài liệu dài ở đầu prompt, câu hỏi ở cuối; bọc từng tài liệu trong thẻ có chỉ số và nguồn; yêu cầu trích dẫn đoạn liên quan trước khi trả lời. Là khuyến nghị cho mô hình của một hãng, cần tự đo lại."
+  },
+  "xu2024conflict": {
+    "group": "Context, generation và trích dẫn",
+    "kind": "Khảo sát",
+    "authors": "Xu, R., Qi, Z., Guo, Z., Wang, C., Wang, H., Zhang, Y., Xu, W.",
+    "year": "2024",
+    "title": "Knowledge Conflicts for LLMs: A Survey",
+    "short": "Knowledge Conflicts (khảo sát)",
+    "venue": "arXiv:2403.08319",
+    "url": "https://arxiv.org/abs/2403.08319",
+    "why": "Phân loại xung đột tri thức thành ba dạng: ngữ cảnh–trí nhớ, giữa các ngữ cảnh, và trong trí nhớ mô hình; tổng hợp hành vi của LLM và các cách giảm thiểu."
+  },
+  "gao2023alce": {
+    "group": "Context, generation và trích dẫn",
+    "kind": "Benchmark",
+    "authors": "Gao, T., Yen, H., Yu, J., Chen, D.",
+    "year": "2023",
+    "title": "Enabling Large Language Models to Generate Text with Citations",
+    "short": "ALCE",
+    "venue": "EMNLP 2023, arXiv:2305.14627",
+    "url": "https://arxiv.org/abs/2305.14627",
+    "why": "Benchmark ALCE đo trích dẫn tự động: citation recall/precision dựa trên mô hình NLI, trên ASQA, QAMPARI, ELI5. Báo cáo rằng trên ELI5, cả mô hình tốt nhất cũng thiếu hỗ trợ trích dẫn đầy đủ khoảng một nửa số lần."
+  },
+  "liu2023verifiability": {
+    "group": "Context, generation và trích dẫn",
+    "kind": "Bài báo",
+    "authors": "Liu, N. F., Zhang, T., Liang, P.",
+    "year": "2023",
+    "title": "Evaluating Verifiability in Generative Search Engines",
+    "short": "Liu et al. 2023 (verifiability)",
+    "venue": "Findings of EMNLP 2023, arXiv:2304.09848",
+    "url": "https://arxiv.org/abs/2304.09848",
+    "why": "Đánh giá thủ công bốn công cụ tìm kiếm tạo sinh (2023): trung bình chỉ 51,5% câu được trích dẫn hỗ trợ đầy đủ và 74,5% trích dẫn thật sự ủng hộ câu đi kèm. Minh chứng “có trích dẫn” khác “trích dẫn đúng”."
+  },
+  "asai2023selfrag": {
+    "group": "Hướng nâng cao",
+    "kind": "Bài báo",
+    "authors": "Asai, A., Wu, Z., Wang, Y., Sil, A., Hajishirzi, H.",
+    "year": "2023",
+    "title": "Self-RAG: Learning to Retrieve, Generate, and Critique through Self-Reflection",
+    "short": "Self-RAG",
+    "venue": "ICLR 2024, arXiv:2310.11511",
+    "url": "https://arxiv.org/abs/2310.11511",
+    "why": "Huấn luyện một LM tự quyết định khi nào truy hồi và tự phê bình đoạn truy hồi lẫn câu trả lời bằng reflection token (liên quan, được hỗ trợ, hữu ích)."
+  },
+  "saadfalcon2023ares": {
+    "group": "Đánh giá và benchmark",
+    "kind": "Bài báo",
+    "authors": "Saad-Falcon, J., Khattab, O., Potts, C., Zaharia, M.",
+    "year": "2023",
+    "title": "ARES: An Automated Evaluation Framework for Retrieval-Augmented Generation Systems",
+    "short": "ARES",
+    "venue": "NAACL 2024, arXiv:2311.09476",
+    "url": "https://arxiv.org/abs/2311.09476",
+    "why": "Sinh dữ liệu tổng hợp để fine-tune các judge nhỏ chấm context relevance, answer faithfulness, answer relevance; dùng vài trăm nhãn người cùng prediction-powered inference để hiệu chỉnh sai số của judge."
+  },
+  "zheng2023judge": {
+    "group": "Đánh giá và benchmark",
+    "kind": "Bài báo",
+    "authors": "Zheng, L., Chiang, W.-L., Sheng, Y., et al.",
+    "year": "2023",
+    "title": "Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena",
+    "short": "LLM-as-a-Judge",
+    "venue": "NeurIPS 2023 Datasets and Benchmarks, arXiv:2306.05685",
+    "url": "https://arxiv.org/abs/2306.05685",
+    "why": "Nghiên cứu nền về dùng LLM làm giám khảo: chỉ ra position bias, verbosity bias, self-enhancement bias; GPT-4 đạt trên 80% đồng thuận với người, ngang mức đồng thuận giữa người với nhau, trên MT-bench và Chatbot Arena."
+  },
+  "wang2023fair": {
+    "group": "Đánh giá và benchmark",
+    "kind": "Bài báo",
+    "authors": "Wang, P., Li, L., Chen, L., et al.",
+    "year": "2023",
+    "title": "Large Language Models are not Fair Evaluators",
+    "short": "Wang et al. 2023 (thiên lệch vị trí)",
+    "venue": "arXiv:2305.17926",
+    "url": "https://arxiv.org/abs/2305.17926",
+    "why": "Cho thấy chỉ cần đổi thứ tự hai câu trả lời là kết luận của LLM giám khảo có thể đảo ngược; đề xuất chấm cân bằng vị trí (đổi chỗ rồi gộp) và đưa ca khó cho người."
+  },
+  "jarvelin2002": {
+    "group": "Đánh giá và benchmark",
+    "kind": "Bài báo",
+    "authors": "Järvelin, K., Kekäläinen, J.",
+    "year": "2002",
+    "title": "Cumulated gain-based evaluation of IR techniques",
+    "short": "Järvelin & Kekäläinen 2002 (nDCG)",
+    "venue": "ACM Transactions on Information Systems 20(4), 422–446",
+    "url": "https://doi.org/10.1145/582415.582418",
+    "why": "Bài báo đề xuất họ chỉ số cumulated gain (CG, DCG, nDCG) cho mức liên quan nhiều bậc và chiết khấu theo vị trí xếp hạng."
+  },
+  "smucker2007": {
+    "group": "Đánh giá và benchmark",
+    "kind": "Bài báo",
+    "authors": "Smucker, M. D., Allan, J., Carterette, B.",
+    "year": "2007",
+    "title": "A comparison of statistical significance tests for information retrieval evaluation",
+    "short": "Smucker et al. 2007",
+    "venue": "CIKM 2007, pp. 623–632",
+    "url": "https://doi.org/10.1145/1321440.1321528",
+    "why": "So sánh các kiểm định ý nghĩa thống kê (randomization, bootstrap, t-test, Wilcoxon, sign test) khi so hai hệ thống truy hồi; tài liệu tham khảo khi cần biết “chênh lệch này có thật không”."
+  },
+  "bassani2022ranx": {
+    "group": "Tài liệu chính thức và mã nguồn",
+    "kind": "Mã nguồn",
+    "authors": "Bassani, E.",
+    "year": "2022",
+    "title": "ranx: A Blazing-Fast Python Library for Ranking Evaluation and Comparison",
+    "short": "ranx",
+    "venue": "ECIR 2022, LNCS 13186, pp. 259–264",
+    "url": "https://github.com/AmenRa/ranx",
+    "why": "Thư viện Python tính Hit Rate, Precision, Recall, MRR, MAP, nDCG…, có kiểm định ý nghĩa thống kê (t-test, randomization) và hợp nhất kết quả (RRF…); README ghi đã đối chiếu với trec_eval."
+  },
+  "vangysel2018": {
+    "group": "Tài liệu chính thức và mã nguồn",
+    "kind": "Mã nguồn",
+    "authors": "Van Gysel, C., de Rijke, M.",
+    "year": "2018",
+    "title": "Pytrec_eval: An Extremely Fast Python Interface to trec_eval",
+    "short": "pytrec_eval",
+    "venue": "SIGIR 2018",
+    "url": "https://github.com/cvangysel/pytrec_eval",
+    "why": "Giao diện Python gọi trực tiếp trec_eval — công cụ chuẩn của cộng đồng TREC — thay vì tự cài đặt lại các chỉ số."
+  },
+  "nist2008treceval": {
+    "group": "Tài liệu chính thức và mã nguồn",
+    "kind": "Mã nguồn",
+    "authors": "NIST (usnistgov)",
+    "year": "2008",
+    "title": "trec_eval",
+    "short": "trec_eval",
+    "venue": "GitHub usnistgov/trec_eval",
+    "url": "https://github.com/usnistgov/trec_eval",
+    "why": "Công cụ chuẩn của TREC để chấm một run truy hồi với tập nhãn qrels: MAP, nDCG, precision, recall, bpref…"
+  },
+  "ragas2025context": {
+    "group": "Tài liệu chính thức và mã nguồn",
+    "kind": "Tài liệu chính thức",
+    "authors": "Ragas",
+    "year": "2025",
+    "title": "Ragas documentation — Context Precision",
+    "short": "Ragas: Context Precision",
+    "venue": "docs.ragas.io (bản stable, truy cập 10/2026)",
+    "url": "https://docs.ragas.io/en/stable/concepts/metrics/available_metrics/context_precision/",
+    "why": "Định nghĩa context precision có trọng số theo hạng, các biến thể dùng LLM, so khớp chuỗi và so khớp ID; trang anh em mô tả context recall."
+  },
+  "ragas2025faith": {
+    "group": "Tài liệu chính thức và mã nguồn",
+    "kind": "Tài liệu chính thức",
+    "authors": "Ragas",
+    "year": "2025",
+    "title": "Ragas documentation — Faithfulness",
+    "short": "Ragas: Faithfulness",
+    "venue": "docs.ragas.io (bản stable, truy cập 10/2026)",
+    "url": "https://docs.ragas.io/en/stable/concepts/metrics/available_metrics/faithfulness/",
+    "why": "Cách Ragas tính faithfulness: tách câu trả lời thành nhận định, kiểm tra từng nhận định với ngữ cảnh, lấy tỷ lệ được hỗ trợ; có biến thể dùng bộ phân loại HHEM thay LLM."
+  }
+}

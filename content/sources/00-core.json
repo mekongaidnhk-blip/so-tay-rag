@@ -1,0 +1,177 @@
+{
+  "lewis2020": {
+    "group": "Bài báo nền tảng",
+    "kind": "Bài báo",
+    "authors": "Lewis, P., Perez, E., Piktus, A., et al.",
+    "year": "2020",
+    "title": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
+    "short": "Lewis et al. 2020",
+    "venue": "NeurIPS 2020, arXiv:2005.11401",
+    "url": "https://arxiv.org/abs/2005.11401",
+    "why": "Bài báo đặt tên “RAG”: kết hợp bộ truy hồi DPR với mô hình sinh BART, huấn luyện đầu-cuối. Nên đọc để hiểu ý tưởng gốc và khác biệt với các pipeline RAG ngày nay (thường không huấn luyện chung)."
+  },
+  "guu2020": {
+    "group": "Bài báo nền tảng",
+    "kind": "Bài báo",
+    "authors": "Guu, K., Lee, K., Tung, Z., Pasupat, P., Chang, M.-W.",
+    "year": "2020",
+    "title": "REALM: Retrieval-Augmented Language Model Pre-Training",
+    "short": "REALM",
+    "venue": "ICML 2020, arXiv:2002.08909",
+    "url": "https://arxiv.org/abs/2002.08909",
+    "why": "Đưa truy hồi vào ngay giai đoạn tiền huấn luyện mô hình ngôn ngữ."
+  },
+  "karpukhin2020": {
+    "group": "Bài báo nền tảng",
+    "kind": "Bài báo",
+    "authors": "Karpukhin, V., Oğuz, B., Min, S., et al.",
+    "year": "2020",
+    "title": "Dense Passage Retrieval for Open-Domain Question Answering",
+    "short": "DPR",
+    "venue": "EMNLP 2020, arXiv:2004.04906",
+    "url": "https://arxiv.org/abs/2004.04906",
+    "why": "Cho thấy bộ truy hồi dense hai tháp (bi-encoder) huấn luyện với cặp câu hỏi–đoạn văn có thể vượt BM25 trên QA miền mở."
+  },
+  "izacard2021": {
+    "group": "Bài báo nền tảng",
+    "kind": "Bài báo",
+    "authors": "Izacard, G., Grave, E.",
+    "year": "2021",
+    "title": "Leveraging Passage Retrieval with Generative Models for Open Domain Question Answering",
+    "short": "Fusion-in-Decoder",
+    "venue": "EACL 2021, arXiv:2007.01282",
+    "url": "https://arxiv.org/abs/2007.01282",
+    "why": "Fusion-in-Decoder: mã hóa từng đoạn riêng rồi hợp nhất khi giải mã; chất lượng tăng theo số đoạn truy hồi."
+  },
+  "borgeaud2022": {
+    "group": "Bài báo nền tảng",
+    "kind": "Bài báo",
+    "authors": "Borgeaud, S., Mensch, A., Hoffmann, J., et al.",
+    "year": "2022",
+    "title": "Improving language models by retrieving from trillions of tokens",
+    "short": "RETRO",
+    "venue": "ICML 2022, arXiv:2112.04426",
+    "url": "https://arxiv.org/abs/2112.04426",
+    "why": "RETRO: mô hình nhỏ hơn nhiều nhưng truy hồi từ kho 2 nghìn tỷ token đạt hiệu năng tương đương mô hình lớn trên một số benchmark mô hình hóa ngôn ngữ."
+  },
+  "gao2023survey": {
+    "group": "Khảo sát và tổng quan",
+    "kind": "Khảo sát",
+    "authors": "Gao, Y., Xiong, Y., Gao, X., et al.",
+    "year": "2023",
+    "title": "Retrieval-Augmented Generation for Large Language Models: A Survey",
+    "short": "Gao et al. 2023 (khảo sát)",
+    "venue": "arXiv:2312.10997",
+    "url": "https://arxiv.org/abs/2312.10997",
+    "why": "Khảo sát rộng, phân loại Naive / Advanced / Modular RAG; hữu ích làm bản đồ tra cứu tài liệu gốc."
+  },
+  "ovadia2023": {
+    "group": "Bài báo nền tảng",
+    "kind": "Bài báo",
+    "authors": "Ovadia, O., Brief, M., Mishaeli, M., Elisha, O.",
+    "year": "2023",
+    "title": "Fine-Tuning or Retrieval? Comparing Knowledge Injection in LLMs",
+    "short": "Ovadia et al. 2023",
+    "venue": "arXiv:2312.05934",
+    "url": "https://arxiv.org/abs/2312.05934",
+    "why": "So sánh trực tiếp fine-tuning không giám sát với RAG để bổ sung kiến thức; trong thí nghiệm của tác giả, RAG nhất quán tốt hơn, kể cả với kiến thức mới."
+  },
+  "liu2023lost": {
+    "group": "Context, generation và trích dẫn",
+    "kind": "Bài báo",
+    "authors": "Liu, N. F., Lin, K., Hewitt, J., et al.",
+    "year": "2023",
+    "title": "Lost in the Middle: How Language Models Use Long Contexts",
+    "short": "Lost in the Middle",
+    "venue": "TACL 2024, arXiv:2307.03172",
+    "url": "https://arxiv.org/abs/2307.03172",
+    "why": "Hiệu năng thường cao nhất khi thông tin liên quan nằm đầu hoặc cuối ngữ cảnh và giảm khi nằm giữa — đo trên các mô hình năm 2023."
+  },
+  "shi2023": {
+    "group": "Context, generation và trích dẫn",
+    "kind": "Bài báo",
+    "authors": "Shi, F., Chen, X., Misra, K., et al.",
+    "year": "2023",
+    "title": "Large Language Models Can Be Easily Distracted by Irrelevant Context",
+    "short": "Shi et al. 2023",
+    "venue": "ICML 2023, arXiv:2302.00093",
+    "url": "https://arxiv.org/abs/2302.00093",
+    "why": "Thêm thông tin không liên quan vào bài toán làm độ chính xác của LLM giảm đáng kể; một số kỹ thuật prompt giảm được ảnh hưởng."
+  },
+  "barnett2024": {
+    "group": "Đánh giá và benchmark",
+    "kind": "Case study",
+    "authors": "Barnett, S., Kurniawan, S., Thudumu, S., Brannelly, Z., Abdelrazek, M.",
+    "year": "2024",
+    "title": "Seven Failure Points When Engineering a Retrieval Augmented Generation System",
+    "short": "Seven Failure Points",
+    "venue": "CAIN 2024, arXiv:2401.05856",
+    "url": "https://arxiv.org/abs/2401.05856",
+    "why": "Bài học từ ba case study thực tế; liệt kê bảy điểm lỗi từ thiếu nội dung tới câu trả lời không đầy đủ."
+  },
+  "robertson2009": {
+    "group": "Retrieval và biểu diễn",
+    "kind": "Bài báo",
+    "authors": "Robertson, S., Zaragoza, H.",
+    "year": "2009",
+    "title": "The Probabilistic Relevance Framework: BM25 and Beyond",
+    "short": "BM25",
+    "venue": "Foundations and Trends in Information Retrieval 3(4)",
+    "url": "https://doi.org/10.1561/1500000019",
+    "why": "Tổng hợp chuẩn mực về nền tảng xác suất của BM25 và các tham số k1, b."
+  },
+  "thakur2021": {
+    "group": "Đánh giá và benchmark",
+    "kind": "Benchmark",
+    "authors": "Thakur, N., Reimers, N., Rücklé, A., Srivastava, A., Gurevych, I.",
+    "year": "2021",
+    "title": "BEIR: A Heterogenous Benchmark for Zero-shot Evaluation of Information Retrieval Models",
+    "short": "BEIR",
+    "venue": "NeurIPS 2021 Datasets and Benchmarks, arXiv:2104.08663",
+    "url": "https://arxiv.org/abs/2104.08663",
+    "why": "18 bộ dữ liệu đa miền; cho thấy BM25 là baseline zero-shot rất mạnh, nhiều mô hình dense kém tổng quát hóa ngoài miền huấn luyện."
+  },
+  "muennighoff2022": {
+    "group": "Đánh giá và benchmark",
+    "kind": "Benchmark",
+    "authors": "Muennighoff, N., Tazi, N., Magne, L., Reimers, N.",
+    "year": "2022",
+    "title": "MTEB: Massive Text Embedding Benchmark",
+    "short": "MTEB",
+    "venue": "EACL 2023, arXiv:2210.07316",
+    "url": "https://arxiv.org/abs/2210.07316",
+    "why": "Benchmark embedding đa tác vụ; kết luận quan trọng: không có mô hình nào thắng ở mọi tác vụ."
+  },
+  "es2023ragas": {
+    "group": "Đánh giá và benchmark",
+    "kind": "Bài báo",
+    "authors": "Es, S., James, J., Espinosa-Anke, L., Schockaert, S.",
+    "year": "2023",
+    "title": "RAGAS: Automated Evaluation of Retrieval Augmented Generation",
+    "short": "RAGAS",
+    "venue": "EACL 2024 Demo, arXiv:2309.15217",
+    "url": "https://arxiv.org/abs/2309.15217",
+    "why": "Đề xuất các chỉ số faithfulness, answer relevance, context relevance đánh giá không cần nhãn tham chiếu."
+  },
+  "greshake2023": {
+    "group": "Bảo mật",
+    "kind": "Bài báo",
+    "authors": "Greshake, K., Abdelnabi, S., Mishra, S., et al.",
+    "year": "2023",
+    "title": "Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection",
+    "short": "Indirect Prompt Injection",
+    "venue": "AISec 2023, arXiv:2302.12173",
+    "url": "https://arxiv.org/abs/2302.12173",
+    "why": "Mô tả hệ thống tấn công prompt injection gián tiếp: chỉ thị độc hại nằm trong dữ liệu mà ứng dụng truy hồi."
+  },
+  "owasp2025": {
+    "group": "Bảo mật",
+    "kind": "Tài liệu chính thức",
+    "authors": "OWASP GenAI Security Project",
+    "year": "2025",
+    "title": "OWASP Top 10 for LLM Applications 2025",
+    "short": "OWASP LLM Top 10 (2025)",
+    "url": "https://genai.owasp.org/llm-top-10/",
+    "why": "Danh mục rủi ro phổ biến; bản 2025 có mục riêng LLM08: Vector and Embedding Weaknesses."
+  }
+}

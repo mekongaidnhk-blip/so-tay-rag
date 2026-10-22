@@ -1,0 +1,220 @@
+---
+{
+  "title": "Vượt ra ngoài “truy hồi một lần”: truy hồi lặp, agentic RAG và GraphRAG",
+  "navTitle": "Agentic RAG & GraphRAG",
+  "description": "Khi nào pipeline truy hồi một lần không đủ, và các hướng mở rộng: truy hồi lặp (IRCoT, FLARE), tự đánh giá (Self-RAG, CRAG), định tuyến theo độ phức tạp (Adaptive-RAG), agent dùng công cụ (ReAct), GraphRAG và truy hồi đa phương thức (ColPali). Kèm chi phí và điều kiện nên dùng.",
+  "lead": "Pipeline RAG cơ bản truy hồi một lần dựa trên câu hỏi rồi sinh câu trả lời. Cách này hỏng với câu hỏi nhiều bước, câu trả lời dài, câu hỏi về toàn bộ kho tài liệu và tài liệu nhiều hình ảnh. Bài này giới thiệu các hướng nâng cao, nêu rõ mỗi hướng giải quyết vấn đề gì và tốn thêm bao nhiêu, để bạn chỉ thêm độ phức tạp khi số đo cho thấy cần.",
+  "level": "Nâng cao",
+  "reviewed": "2026-10-22",
+  "kinds": ["nen-tang", "nghien-cuu", "kinh-nghiem", "nhan-dinh"]
+}
+---
+<div class="callout tom-tat">
+<ul>
+<li>Pipeline cố định thất bại theo bốn kiểu dễ nhận ra: câu hỏi <strong>nhiều bước</strong> (bước sau cần kết quả của bước trước), câu trả lời <strong>dài</strong> cần thông tin mới giữa chừng, câu hỏi <strong>toàn cục</strong> về cả kho, và tài liệu <strong>giàu hình ảnh</strong> mà trích xuất văn bản làm mất thông tin.</li>
+<li><strong>Truy hồi lặp</strong> (IRCoT, FLARE) xen kẽ truy hồi với quá trình suy luận hoặc sinh. <strong>Tự đánh giá</strong> (Self-RAG, CRAG) kiểm tra tài liệu truy hồi trước khi dùng. <strong>Định tuyến</strong> (Adaptive-RAG) chọn chiến lược theo độ khó của câu hỏi.</li>
+<li><strong>Agentic RAG</strong> để LLM tự quyết định gọi công cụ tìm kiếm khi nào và với truy vấn gì, theo mẫu ReAct. Cách này linh hoạt nhất, nhưng chi phí và độ trễ khó đoán, khó đánh giá, và rủi ro prompt injection tăng khi có công cụ.</li>
+<li><strong>GraphRAG</strong> dựng đồ thị thực thể và tóm tắt cộng đồng bằng LLM để trả lời câu hỏi toàn cục. Chi phí lập chỉ mục cao, nên hãy bắt đầu với dữ liệu nhỏ.</li>
+<li>Nguyên tắc chung: <strong>đo trước, thêm sau</strong>. Phần lớn lỗi của RAG nằm ở dữ liệu và truy hồi cơ bản. Một agent phức tạp không sửa được tài liệu bị trích xuất sai.</li>
+</ul>
+</div>
+
+<h2>Khi nào pipeline cố định không đủ</h2>
+<p>Hãy xét bốn câu hỏi gửi tới trợ lý của một ngân hàng:</p>
+<ol>
+<li><em>“Phí rút tiền ATM khác ngân hàng là bao nhiêu?”</em> Một lần truy hồi là đủ.</li>
+<li><em>“Thẻ tín dụng mà tôi được miễn phí thường niên năm đầu thì có hạn mức rút tiền mặt bao nhiêu?”</em> Phải tìm ra <em>loại thẻ nào</em> được miễn phí năm đầu, rồi mới tìm được <em>hạn mức của thẻ đó</em>. Truy vấn cho bước hai phụ thuộc kết quả bước một.</li>
+<li><em>“Viết bản so sánh đầy đủ các gói vay mua nhà hiện có.”</em> Câu trả lời dài. Mỗi đoạn cần thông tin về một gói khác nhau, mà câu hỏi ban đầu không nêu tên gói nào.</li>
+<li><em>“Năm nay khách hàng phàn nàn nhiều nhất về vấn đề gì?”</em> (trên 50.000 phiếu khiếu nại). Không có đoạn văn nào chứa câu trả lời. Câu trả lời là bản tổng hợp từ toàn bộ kho.</li>
+</ol>
+<p>Câu 1 là trường hợp RAG cơ bản làm tốt. Câu 2 là câu hỏi <strong>nhiều bước (multi-hop)</strong>. Câu 3 là <strong>sinh văn bản dài</strong>. Câu 4 là câu hỏi <strong>toàn cục (global sensemaking)</strong>. Mỗi loại cần một cách mở rộng khác nhau. Trước khi chọn kỹ thuật, hãy xác định người dùng của bạn thực sự hỏi loại nào, và chiếm tỷ lệ bao nhiêu. Bài [[link:danh-gia/chan-doan-loi]] hướng dẫn phân loại lỗi để biết điều này.</p>
+<div class="callout canh-bao">
+<p>Trước khi kết luận “cần agent”, hãy kiểm tra các nguyên nhân rẻ hơn: tài liệu có thật sự chứa câu trả lời không, trích xuất có làm hỏng bảng không ([[link:du-lieu/thu-thap-lam-sach]]), hybrid search và rerank đã được dùng chưa ([[link:tim-kiem/hybrid-search]], [[link:tim-kiem/reranking]]), và tách câu hỏi bằng một lần gọi LLM ([[link:tim-kiem/xu-ly-truy-van]]) đã đủ chưa. Nhiều câu hỏi “nhiều bước” chỉ cần tách truy vấn một lần, không cần vòng lặp.</p>
+</div>
+
+<h2>Truy hồi lặp: xen kẽ tìm kiếm và suy luận</h2>
+<h3>IRCoT: truy hồi theo từng bước suy luận</h3>
+<p>Trivedi và cộng sự nhận xét rằng với câu hỏi nhiều bước, “cần truy hồi gì phụ thuộc vào những gì đã suy ra được”. IRCoT (Interleaving Retrieval with Chain-of-Thought) cho mô hình viết một câu suy luận (chain-of-thought — chuỗi suy luận), dùng câu đó làm truy vấn để truy hồi thêm, rồi dùng tài liệu mới để viết câu suy luận tiếp theo, cứ thế lặp lại. Trên bốn bộ dữ liệu nhiều bước (HotpotQA, 2WikiMultihopQA, MuSiQue, IIRC) với GPT-3, các tác giả báo cáo truy hồi cải thiện tới 21 điểm và chất lượng trả lời cải thiện tới 15 điểm so với truy hồi một lần. Mức cải thiện tương tự xuất hiện với mô hình nhỏ hơn nhiều như Flan-T5-large mà không cần huấn luyện thêm[[cite:trivedi2023ircot]].</p>
+
+<h3>FLARE: truy hồi chủ động khi mô hình “không chắc”</h3>
+<p>FLARE (Forward-Looking Active REtrieval) nhắm vào sinh văn bản dài. Mô hình viết nháp câu tiếp theo. Nếu bản nháp chứa token có độ tin cậy thấp, hệ thống dùng chính bản nháp làm truy vấn để truy hồi, rồi viết lại câu đó với tài liệu mới. Như vậy hệ thống chỉ truy hồi khi cần, và truy vấn phản ánh nội dung sắp viết thay vì chỉ câu hỏi ban đầu. Trên 4 tác vụ sinh văn bản dài cần nhiều tri thức, các tác giả báo cáo FLARE tốt hơn hoặc ngang các baseline[[cite:jiang2023flare]].</p>
+<div class="callout kinh-nghiem">
+<p><strong>Chi phí của truy hồi lặp</strong> tăng theo số vòng: mỗi vòng có ít nhất một lần gọi LLM và một lần truy hồi, chạy <em>tuần tự</em>. Câu hỏi 3 bước có thể chậm gấp ba so với truy hồi một lần. FLARE cần xác suất token (logprob) để đo độ tin cậy, và không phải API nào cũng cung cấp. Thực hành phổ biến là giới hạn số vòng tối đa và chỉ bật truy hồi lặp cho loại câu hỏi đã được định tuyến là “phức tạp” (xem Adaptive-RAG bên dưới). Ngân sách độ trễ ở [[link:van-hanh/chi-phi-do-tre]].</p>
+</div>
+
+<h2>Tự đánh giá: kiểm tra tài liệu trước khi dùng</h2>
+<h3>Self-RAG: mô hình được huấn luyện để tự phê bình</h3>
+<p>Self-RAG (Asai và cộng sự, ICLR 2024) huấn luyện một mô hình ngôn ngữ sinh thêm các <strong>reflection token</strong> (token phản tư). Các token này cho biết có cần truy hồi không, đoạn truy hồi có liên quan không, câu trả lời có được tài liệu ủng hộ không. Mô hình nhờ đó chỉ truy hồi khi cần và tự đánh giá cả tài liệu lẫn đầu ra của mình. Vì các token này do mô hình sinh ra, có thể điều chỉnh hành vi lúc suy luận theo yêu cầu của từng tác vụ. Các tác giả báo cáo bản 7B và 13B vượt ChatGPT và Llama2-chat có truy hồi trên QA miền mở, suy luận và kiểm chứng thông tin, đồng thời cải thiện độ chính xác của trích dẫn với văn bản dài[[cite:asai2023selfrag]].</p>
+<p>Điểm cần lưu ý khi áp dụng: Self-RAG đòi hỏi <em>huấn luyện</em> mô hình sinh. Nếu bạn dùng LLM qua API và không fine-tune được, bạn chỉ có thể mô phỏng ý tưởng bằng prompt (“trước khi trả lời, đánh giá từng đoạn có liên quan không”). Cách đó không có cùng tính chất với mô hình đã được huấn luyện.</p>
+
+<h3>CRAG: bộ đánh giá nhẹ và hành động sửa chữa</h3>
+<p>Corrective RAG (Yan và cộng sự, 2024, bản preprint) thêm một <strong>bộ đánh giá truy hồi nhẹ</strong> chấm chất lượng tổng thể của các tài liệu truy hồi cho một truy vấn. Dựa trên độ tin cậy đó, hệ thống chọn một trong ba hành động. <em>Đúng</em>: lọc và giữ phần liên quan của tài liệu, bằng thuật toán tách rồi ghép lại (decompose-then-recompose). <em>Sai</em>: viết lại truy vấn và tìm trên web. <em>Mơ hồ</em>: kết hợp cả hai. Phương pháp được thiết kế dạng “cắm vào” (plug-and-play) cho các pipeline RAG khác nhau, và cải thiện kết quả trên bốn bộ dữ liệu sinh văn bản ngắn và dài[[cite:yan2024crag]].</p>
+<div class="callout canh-bao">
+<p><strong>Tìm trên web làm phương án dự phòng</strong> thường không phù hợp với RAG doanh nghiệp. Câu hỏi nội bộ bị gửi ra công cụ tìm kiếm bên ngoài, và nội dung web không kiểm soát được đi vào prompt. Đó là kênh prompt injection gián tiếp kinh điển ([[link:van-hanh/bao-mat]]). Phần đáng học từ CRAG là ý tưởng <em>đánh giá chất lượng truy hồi và có hành động khác khi chất lượng thấp</em>. Hành động đó có thể là trả lời “không tìm thấy”, hỏi lại người dùng hoặc chuyển cho nhân viên.</p>
+</div>
+
+<h2>Định tuyến theo độ phức tạp: không phải câu hỏi nào cũng cần vòng lặp</h2>
+<p>Adaptive-RAG (Jeong và cộng sự, NAACL 2024) xuất phát từ một quan sát thực tế: câu hỏi thật có độ khó khác nhau. Dùng truy hồi lặp cho mọi câu là lãng phí, còn dùng truy hồi một lần cho mọi câu thì câu khó bị trả lời kém. Phương pháp huấn luyện một <strong>bộ phân loại là mô hình ngôn ngữ nhỏ</strong> dự đoán độ phức tạp của câu hỏi, rồi chọn một trong ba chiến lược: không truy hồi, truy hồi một lần, hoặc truy hồi lặp nhiều bước. Nhãn huấn luyện được thu tự động từ kết quả thực tế của các chiến lược và từ đặc điểm sẵn có của bộ dữ liệu. Trên các bộ QA miền mở với nhiều mức độ phức tạp, các tác giả báo cáo hiệu quả và độ chính xác tổng thể tốt hơn các baseline liên quan[[cite:jeong2024adaptive]].</p>
+<div class="callout nhan-dinh">
+<p>Chúng tôi cho rằng <strong>định tuyến là “kỹ thuật nâng cao” nên thử đầu tiên</strong>, vì nó có thể <em>giảm</em> chi phí trung bình thay vì chỉ tăng. Bộ định tuyến không nhất thiết là mô hình được huấn luyện. Vài quy tắc đơn giản (câu hỏi có từ so sánh hoặc nhiều thực thể thì đi luồng phức tạp; câu ngắn khớp FAQ thì đi luồng nhanh) hoặc một lần gọi LLM nhỏ để phân loại thường là điểm khởi đầu hợp lý. Hãy đo tỷ lệ phân loại sai trên bộ đánh giá của bạn.</p>
+</div>
+
+<h2>Agentic RAG: LLM tự quyết định tìm kiếm</h2>
+<h3>Mẫu ReAct</h3>
+<p>Trong agentic RAG, truy hồi trở thành một <strong>công cụ</strong> mà LLM gọi khi cần. Hệ thống không áp đặt các bước cố định. Mẫu phổ biến nhất là ReAct (Yao và cộng sự, ICLR 2023): mô hình sinh xen kẽ <em>suy nghĩ</em> (lập kế hoạch, điều chỉnh) và <em>hành động</em> (gọi công cụ), rồi nhận <em>quan sát</em> (kết quả công cụ). Trên HotpotQA và Fever, khi chỉ dùng một API Wikipedia đơn giản, ReAct giảm được hiện tượng ảo giác và lan truyền lỗi thường gặp ở chain-of-thought thuần, và quỹ đạo giải bài dễ diễn giải hơn. Trên ALFWorld và WebShop, ReAct vượt các phương pháp học bắt chước và học tăng cường lần lượt 34 và 10 điểm phần trăm tuyệt đối về tỷ lệ thành công, chỉ với một hoặc hai ví dụ trong prompt[[cite:yao2023react]].</p>
+<figure class="diagram">
+<svg viewBox="0 0 760 270" width="760" role="img" aria-labelledby="ag1t ag1d">
+<title id="ag1t">Vòng lặp của agentic RAG theo mẫu ReAct</title>
+<desc id="ag1d">Câu hỏi đi vào LLM. LLM suy nghĩ rồi chọn hành động gọi công cụ như tìm tài liệu hoặc tra cứu cơ sở dữ liệu. Kết quả quay lại làm quan sát cho LLM. Vòng lặp tiếp tục cho tới khi LLM đủ thông tin để trả lời, hoặc chạm giới hạn số bước và ngân sách token.</desc>
+<defs><marker id="ag1a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="arrowhead"/></marker></defs>
+<rect x="20" y="96" width="110" height="56" rx="8" class="box-b"/><text x="75" y="120" font-size="14" text-anchor="middle">Câu hỏi</text><text x="75" y="138" font-size="11.5" text-anchor="middle" class="muted">+ lịch sử</text>
+<rect x="190" y="86" width="150" height="76" rx="8" class="box-w"/><text x="265" y="112" font-size="14" text-anchor="middle" font-weight="700">LLM</text><text x="265" y="130" font-size="11.5" text-anchor="middle" class="muted">suy nghĩ: cần gì?</text><text x="265" y="146" font-size="11.5" text-anchor="middle" class="muted">chọn hành động</text>
+<rect x="420" y="20" width="190" height="56" rx="8" class="box-a"/><text x="515" y="44" font-size="14" text-anchor="middle">Hành động</text><text x="515" y="62" font-size="11.5" text-anchor="middle" class="muted">search_docs, tra_cuu_sql…</text>
+<rect x="420" y="172" width="190" height="56" rx="8" class="box"/><text x="515" y="196" font-size="14" text-anchor="middle">Quan sát</text><text x="515" y="214" font-size="11.5" text-anchor="middle" class="muted">chunk, bản ghi, lỗi</text>
+<rect x="640" y="96" width="104" height="56" rx="8" class="box-v"/><text x="692" y="120" font-size="14" text-anchor="middle">Trả lời</text><text x="692" y="138" font-size="11.5" text-anchor="middle" class="muted">+ trích dẫn</text>
+<path d="M130 124h58" class="ln" marker-end="url(#ag1a)"/>
+<path d="M340 104 C380 60 390 48 418 48" class="ln" marker-end="url(#ag1a)"/>
+<path d="M515 76 V170" class="ln" marker-end="url(#ag1a)"/>
+<path d="M420 200 C380 200 360 180 342 150" class="ln" marker-end="url(#ag1a)"/>
+<path d="M340 124 C470 124 560 124 638 124" class="ln-a" marker-end="url(#ag1a)"/>
+<text x="560" y="116" font-size="11" text-anchor="middle" class="muted">đủ thông tin</text>
+<rect x="20" y="236" width="724" height="28" rx="6" class="box-v"/>
+<text x="382" y="255" font-size="12" text-anchor="middle">Rào chắn bắt buộc: tối đa N bước · ngân sách token · công cụ chỉ đọc · log toàn bộ quỹ đạo</text>
+</svg>
+<figcaption>Agent quyết định khi nào truy hồi và truy hồi gì. Thiếu giới hạn số bước và ngân sách, vòng lặp có thể chạy rất lâu và rất tốn kém.</figcaption>
+</figure>
+
+<h3>Ví dụ quỹ đạo</h3>
+<p>Một trợ lý nhân sự với sổ tay giả định, câu hỏi: <em>“Mình làm ở chi nhánh Đà Nẵng được 6 năm thì một năm có bao nhiêu ngày phép?”</em></p>
+<pre><code>Suy nghĩ: Cần số ngày phép cơ bản, quy định cộng thêm theo thâm niên,
+          và kiểm tra chi nhánh Đà Nẵng có phụ lục riêng không.
+Hành động: search_docs("số ngày nghỉ phép năm cơ bản")
+Quan sát:  [Sổ tay NS, Mục 4.2] "Nhân viên chính thức được 12 ngày phép/năm..."
+Hành động: search_docs("ngày phép tăng theo thâm niên")
+Quan sát:  [Mục 4.3] "Cứ đủ 5 năm làm việc được cộng thêm 1 ngày phép..."
+Hành động: search_docs("phụ lục chi nhánh Đà Nẵng nghỉ phép")
+Quan sát:  (không có đoạn nào liên quan, điểm cao nhất 0.21)
+Suy nghĩ: Đủ thông tin. Nêu rõ là không tìm thấy quy định riêng của chi nhánh.
+Trả lời:  13 ngày/năm: 12 ngày cơ bản (Mục 4.2) + 1 ngày cho 5 năm thâm niên
+          (Mục 4.3). Không tìm thấy phụ lục riêng cho chi nhánh Đà Nẵng;
+          bạn nên xác nhận với phòng nhân sự chi nhánh.</code></pre>
+<p>Pipeline cố định có thể bỏ sót Mục 4.3 vì câu hỏi không chứa chữ “thâm niên”, và gần như chắc chắn không chủ động kiểm tra phụ lục chi nhánh. Agent làm được cả hai, với cái giá là ba lần truy hồi, bốn lần gọi LLM và độ trễ tương ứng.</p>
+
+<h3>Rủi ro riêng của agent</h3>
+<ul>
+<li><strong>Chi phí và độ trễ không đoán trước được.</strong> Số bước thay đổi theo câu hỏi, và agent có thể lặp lại cùng một tìm kiếm. OWASP xếp loại rủi ro này vào LLM10 Unbounded Consumption[[cite:owasp2025]]. Hãy đặt giới hạn số bước, ngân sách token và thời gian tổng.</li>
+<li><strong>Quyền hạn quá mức.</strong> Agent có công cụ ghi (gửi email, tạo phiếu) cộng với tài liệu không tin cậy trong ngữ cảnh là điều kiện đủ cho tấn công prompt injection gián tiếp gây hậu quả thật (LLM06 Excessive Agency). Xem [[link:van-hanh/bao-mat]].</li>
+<li><strong>Khó đánh giá.</strong> Cùng một câu hỏi có thể cho quỹ đạo khác nhau giữa các lần chạy. Cần đánh giá cả câu trả lời cuối lẫn quỹ đạo: có gọi đúng công cụ không, có thừa bước không. Xem [[link:danh-gia/danh-gia-generation]].</li>
+<li><strong>Agent tự điền tham số bảo mật.</strong> Bộ lọc quyền phải do lớp truy cập dữ liệu chèn vào từ phiên đăng nhập, không phải tham số mà LLM điền khi gọi công cụ.</li>
+</ul>
+
+<h2>GraphRAG: trả lời câu hỏi về toàn bộ kho</h2>
+<h3>Vấn đề và cơ chế</h3>
+<p>Quay lại câu hỏi “khách hàng phàn nàn nhiều nhất về vấn đề gì?”. Top-k chỉ trả về vài phiếu khiếu nại giống câu hỏi nhất, không phải bức tranh tổng thể. Edge và cộng sự (Microsoft, 2024) coi đây là bài toán <strong>tóm tắt tập trung vào truy vấn</strong> (query-focused summarization) trên cả kho, và đề xuất GraphRAG với hai giai đoạn lập chỉ mục bằng LLM[[cite:edge2024graphrag]]:</p>
+<ol class="steps">
+<li>Dùng LLM <strong>trích xuất đồ thị tri thức thực thể</strong> (người, tổ chức, sản phẩm, sự kiện và quan hệ giữa chúng) từ các chunk.</li>
+<li>Gom các nhóm thực thể liên quan chặt chẽ thành <strong>cộng đồng</strong> và dùng LLM <strong>viết sẵn bản tóm tắt cho từng cộng đồng</strong>.</li>
+</ol>
+<p>Khi có câu hỏi toàn cục, mỗi bản tóm tắt cộng đồng sinh một câu trả lời từng phần, rồi các câu trả lời từng phần được tổng hợp thành câu trả lời cuối, theo kiểu map-reduce. Trên các kho khoảng một triệu token, các tác giả báo cáo GraphRAG vượt baseline RAG thông thường đáng kể về <em>tính toàn diện</em> và <em>tính đa dạng</em> của câu trả lời cho câu hỏi toàn cục[[cite:edge2024graphrag]].</p>
+<figure class="diagram">
+<svg viewBox="0 0 760 250" width="760" role="img" aria-labelledby="ag2t ag2d">
+<title id="ag2t">Lập chỉ mục và truy vấn trong GraphRAG</title>
+<desc id="ag2d">Lập chỉ mục: các chunk được LLM trích xuất thực thể và quan hệ thành đồ thị, đồ thị được chia thành cộng đồng, LLM viết tóm tắt cho từng cộng đồng. Truy vấn toàn cục dùng các bản tóm tắt cộng đồng theo kiểu map-reduce. Truy vấn cục bộ đi từ thực thể trong câu hỏi tới các nút lân cận và chunk gốc.</desc>
+<defs><marker id="ag2a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="arrowhead"/></marker></defs>
+<text x="20" y="22" font-size="12.5" font-weight="700" class="muted">LẬP CHỈ MỤC (nhiều lần gọi LLM, chi phí cao)</text>
+<rect x="20" y="34" width="120" height="52" rx="8" class="box"/><text x="80" y="57" font-size="13.5" text-anchor="middle">Chunk</text><text x="80" y="74" font-size="11" text-anchor="middle" class="muted">toàn bộ kho</text>
+<rect x="180" y="34" width="150" height="52" rx="8" class="box-w"/><text x="255" y="57" font-size="13.5" text-anchor="middle">LLM trích xuất</text><text x="255" y="74" font-size="11" text-anchor="middle" class="muted">thực thể + quan hệ</text>
+<rect x="370" y="34" width="150" height="52" rx="8" class="box"/><text x="445" y="57" font-size="13.5" text-anchor="middle">Đồ thị → cộng đồng</text><text x="445" y="74" font-size="11" text-anchor="middle" class="muted">phát hiện cộng đồng</text>
+<rect x="560" y="34" width="180" height="52" rx="8" class="box-w"/><text x="650" y="57" font-size="13.5" text-anchor="middle">LLM tóm tắt</text><text x="650" y="74" font-size="11" text-anchor="middle" class="muted">mỗi cộng đồng</text>
+<path d="M140 60h38M330 60h38M520 60h38" class="ln" marker-end="url(#ag2a)"/>
+<text x="20" y="128" font-size="12.5" font-weight="700" class="muted">TRUY VẤN</text>
+<rect x="20" y="140" width="200" height="52" rx="8" class="box-b"/><text x="120" y="163" font-size="13.5" text-anchor="middle">Câu hỏi toàn cục</text><text x="120" y="180" font-size="11" text-anchor="middle" class="muted">“chủ đề chính là gì?”</text>
+<rect x="270" y="140" width="210" height="52" rx="8" class="box-a"/><text x="375" y="163" font-size="13.5" text-anchor="middle">Map: trả lời từng phần</text><text x="375" y="180" font-size="11" text-anchor="middle" class="muted">trên từng tóm tắt cộng đồng</text>
+<rect x="530" y="140" width="210" height="52" rx="8" class="box-v"/><text x="635" y="163" font-size="13.5" text-anchor="middle">Reduce: tổng hợp</text><text x="635" y="180" font-size="11" text-anchor="middle" class="muted">câu trả lời cuối</text>
+<path d="M220 166h48M480 166h48" class="ln" marker-end="url(#ag2a)"/>
+<path d="M650 86 V112 H375 V138" class="ln-d" marker-end="url(#ag2a)"/>
+<rect x="20" y="208" width="720" height="34" rx="6" class="box"/>
+<text x="380" y="230" font-size="12" text-anchor="middle">Truy vấn cục bộ: thực thể trong câu hỏi → nút lân cận trên đồ thị + chunk gốc liên quan</text>
+</svg>
+<figcaption>GraphRAG chuyển phần lớn công việc tổng hợp sang giai đoạn lập chỉ mục. Đổi lại, câu hỏi toàn cục trả lời được, và lập chỉ mục tốn nhiều lần gọi LLM.</figcaption>
+</figure>
+
+<h3>Truy vấn cục bộ và toàn cục</h3>
+<p>Theo tài liệu của bản cài đặt mã nguồn mở của Microsoft (tính đến 10/2026), GraphRAG có nhiều chế độ truy vấn. <strong>Global search</strong> trả lời câu hỏi bao quát về cả kho dựa trên tóm tắt cộng đồng. <strong>Local search</strong> trả lời câu hỏi về thực thể cụ thể bằng cách mở rộng ra các nút lân cận. <strong>DRIFT search</strong> kết hợp local search với ngữ cảnh cấp cộng đồng. <strong>Basic search</strong> là truy hồi vector top-k thông thường[[cite:microsoft2024graphragcode]]. Như vậy, GraphRAG không thay thế RAG thông thường cho câu hỏi tra cứu cụ thể. Nó bổ sung khả năng trả lời loại câu hỏi mà RAG thông thường làm kém.</p>
+
+<h3>Chi phí và giới hạn</h3>
+<ul>
+<li><strong>Lập chỉ mục đắt.</strong> README của dự án cảnh báo rằng lập chỉ mục GraphRAG “có thể là một thao tác tốn kém”, khuyên đọc kỹ tài liệu để hiểu quy trình và chi phí, và khuyên bắt đầu với dữ liệu nhỏ. Nó cũng lưu ý kết quả với cấu hình mặc định có thể chưa tốt và khuyến nghị tinh chỉnh prompt[[cite:microsoft2024graphragcode]]. Lý do dễ thấy: mọi chunk đều phải qua LLM để trích xuất, và mọi cộng đồng đều cần một lần gọi LLM để tóm tắt.</li>
+<li><strong>Cập nhật phức tạp hơn.</strong> Thêm tài liệu có thể làm thay đổi đồ thị và cấu trúc cộng đồng, kéo theo việc viết lại tóm tắt.</li>
+<li><strong>Chất lượng phụ thuộc bước trích xuất.</strong> Thực thể tiếng Việt bị tách sai, viết tắt không thống nhất (“NHNN” và “Ngân hàng Nhà nước”) hay trùng tên làm đồ thị sai ngay từ đầu.</li>
+<li><strong>Ranh giới quyền.</strong> Một bản tóm tắt cộng đồng có thể gộp tài liệu thuộc nhiều mức quyền khác nhau. Xem [[link:van-hanh/bao-mat]].</li>
+<li><strong>Đánh giá khó.</strong> Câu hỏi toàn cục không có đáp án duy nhất. Bài báo dùng LLM để so sánh từng cặp câu trả lời theo các tiêu chí như tính toàn diện và tính đa dạng. Cách đánh giá này có giới hạn của LLM-as-a-judge ([[link:danh-gia/danh-gia-generation]]).</li>
+</ul>
+<div class="callout kinh-nghiem">
+<p>Đồ thị tri thức cũng hữu ích theo cách khác: dựng đồ thị từ <em>cấu trúc có sẵn</em> của dữ liệu thay vì để LLM trích xuất tự do. Ví dụ, nhóm của LinkedIn dựng đồ thị từ cấu trúc bên trong và quan hệ giữa các phiếu hỗ trợ cũ, và báo cáo cải thiện khi triển khai thực tế. Chi tiết ở [[link:nang-cao/tinh-huong-ung-dung]].</p>
+</div>
+
+<h3>RAPTOR và tóm tắt phân cấp</h3>
+<p>Một hướng gần với GraphRAG là dựng <strong>cây tóm tắt</strong>: gom cụm các chunk, tóm tắt từng cụm, rồi gom cụm và tóm tắt tiếp các bản tóm tắt, tới khi có tầng tổng quan. Truy hồi có thể lấy nút ở nhiều tầng. RAPTOR là đại diện tiêu biểu của hướng này. Bài [[link:du-lieu/metadata-va-bieu-dien]] trình bày cách biểu diễn tài liệu ở nhiều mức chi tiết. Hướng này cũng có chi phí lập chỉ mục bằng LLM và rủi ro gộp quyền như GraphRAG.</p>
+
+<h2>Truy hồi đa phương thức: khi tài liệu là hình ảnh</h2>
+<p>Nhiều tài liệu doanh nghiệp là bản scan, slide, báo cáo tài chính có biểu đồ, catalog sản phẩm. Trích xuất văn bản (OCR, phân tích bố cục) vừa chậm vừa dễ mất thông tin nằm trong bố cục, bảng và hình ([[link:du-lieu/thu-thap-lam-sach]]). ColPali (Faysse và cộng sự, ICLR 2025) đi theo hướng khác: <strong>embedding trực tiếp ảnh của trang tài liệu</strong> bằng một mô hình thị giác–ngôn ngữ (VLM). Mô hình sinh nhiều vector cho mỗi trang (multi-vector) và so khớp với truy vấn theo cơ chế tương tác muộn (late interaction). Các tác giả giới thiệu benchmark ViDoRe cho truy hồi tài liệu dạng ảnh, và báo cáo ColPali vượt xa các pipeline truy hồi tài liệu hiện đại, trong khi đơn giản và nhanh hơn[[cite:faysse2024colpali]].</p>
+<p>Đánh đổi: lưu nhiều vector cho mỗi trang tốn bộ nhớ hơn nhiều so với một vector cho mỗi chunk. Bước sinh cũng cần LLM đọc được ảnh, nếu bạn đưa ảnh trang thay vì văn bản vào ngữ cảnh. Trích dẫn tới “trang 14” cũng kém chính xác hơn trích dẫn tới một đoạn văn cụ thể.</p>
+
+<h2>Bảng so sánh</h2>
+<table>
+<thead><tr><th>Kỹ thuật</th><th>Vấn đề giải quyết</th><th>Chi phí thêm</th><th>Khi nào cân nhắc</th></tr></thead>
+<tbody>
+<tr><td>Viết lại hoặc tách truy vấn ([[link:tim-kiem/xu-ly-truy-van|bài riêng]])</td><td>Câu hỏi hội thoại, nhiều ý</td><td>Thêm 1 lần gọi LLM</td><td>Bước đầu tiên trước mọi kỹ thuật dưới đây</td></tr>
+<tr><td>Định tuyến (Adaptive-RAG)[[cite:jeong2024adaptive]]</td><td>Câu hỏi có độ khó khác nhau</td><td>Bộ phân loại nhỏ; có thể giảm chi phí trung bình</td><td>Khi đã có ít nhất hai luồng xử lý với chi phí khác nhau</td></tr>
+<tr><td>IRCoT[[cite:trivedi2023ircot]]</td><td>Câu hỏi nhiều bước</td><td>Số lần gọi LLM và truy hồi tăng theo số bước, chạy tuần tự</td><td>Tỷ lệ đáng kể câu hỏi nhiều bước; tách truy vấn một lần không đủ</td></tr>
+<tr><td>FLARE[[cite:jiang2023flare]]</td><td>Văn bản dài cần thông tin mới giữa chừng</td><td>Nhiều vòng sinh và truy hồi; cần logprob</td><td>Sinh báo cáo, bài tổng hợp dài</td></tr>
+<tr><td>Self-RAG[[cite:asai2023selfrag]]</td><td>Truy hồi không cần thiết, đoạn không liên quan, câu trả lời không được ủng hộ</td><td>Huấn luyện mô hình sinh</td><td>Có năng lực fine-tune và tự host mô hình</td></tr>
+<tr><td>CRAG[[cite:yan2024crag]]</td><td>Truy hồi chất lượng thấp</td><td>Bộ đánh giá nhẹ; có thể thêm tìm kiếm web</td><td>Muốn phát hiện “truy hồi kém” để xử lý khác; cân nhắc kỹ trước khi dùng tìm kiếm web</td></tr>
+<tr><td>Agentic RAG (ReAct)[[cite:yao2023react]]</td><td>Câu hỏi mở, cần nhiều nguồn và công cụ</td><td>Không cố định; độ trễ cao; khó đánh giá; rủi ro bảo mật</td><td>Câu hỏi đa dạng cần kết hợp tài liệu với SQL hoặc API; đã có rào chắn và đánh giá quỹ đạo</td></tr>
+<tr><td>GraphRAG[[cite:edge2024graphrag]]</td><td>Câu hỏi toàn cục về cả kho</td><td>Lập chỉ mục bằng LLM trên toàn kho; cập nhật phức tạp</td><td>Phân tích kho tài liệu (khiếu nại, báo cáo, tin tức), không phải tra cứu chi tiết</td></tr>
+<tr><td>Tóm tắt phân cấp (RAPTOR)</td><td>Câu hỏi cần nhiều mức chi tiết</td><td>Lập chỉ mục bằng LLM</td><td>Tài liệu dài có cấu trúc chủ đề rõ</td></tr>
+<tr><td>ColPali (đa phương thức)[[cite:faysse2024colpali]]</td><td>Tài liệu scan, slide, biểu đồ</td><td>Bộ nhớ multi-vector; LLM đọc ảnh</td><td>Trích xuất văn bản làm mất thông tin quan trọng</td></tr>
+</tbody></table>
+
+<h2>Thêm độ phức tạp một cách có kỷ luật</h2>
+<div class="callout nhan-dinh">
+<p>Các kết quả trong bài báo ở trên đều đo trên benchmark học thuật: HotpotQA, MuSiQue, các bộ QA miền mở, kho khoảng một triệu token. Benchmark nhiều bước được <em>xây dựng</em> để cần nhiều bước, còn câu hỏi thật của người dùng thì thường không như vậy. Chúng tôi khuyên đi theo thang sau và chỉ bước lên bậc tiếp khi có số đo cho thấy bậc hiện tại là điểm nghẽn:</p>
+<ol>
+<li>Dữ liệu sạch, chunking hợp lý, hybrid search và rerank, cùng một bộ đánh giá có câu hỏi thật.</li>
+<li>Viết lại hoặc tách truy vấn.</li>
+<li>Định tuyến: luồng nhanh cho câu dễ, luồng đầy đủ cho câu khó.</li>
+<li>Truy hồi lặp có giới hạn số vòng cho loại câu hỏi đã được xác định là nhiều bước.</li>
+<li>Agent có công cụ, chỉ khi cần kết hợp nhiều nguồn và công cụ, kèm rào chắn đầy đủ.</li>
+</ol>
+<p>GraphRAG và đa phương thức nằm trên trục khác. Chúng giải quyết <em>loại câu hỏi</em> (toàn cục) hay <em>loại dữ liệu</em> (hình ảnh) mà pipeline thường không làm được, chứ không phải nâng cấp chung cho mọi trường hợp.</p>
+</div>
+
+<h2>Lỗi thường gặp</h2>
+<details class="qa"><summary>“Chuyển sang agent thì chất lượng sẽ tốt hơn”</summary>
+<p>Agent chỉ tốt hơn khi lỗi gốc là <em>thiếu bước truy hồi</em>. Nếu lỗi gốc là tài liệu đúng không có trong chỉ mục, hoặc bộ truy hồi không bao giờ xếp nó lên top-k với bất kỳ truy vấn nào, thì agent chỉ gọi tìm kiếm nhiều lần hơn mà vẫn thất bại, và tốn hơn. Hãy phân loại lỗi trước ([[link:danh-gia/chan-doan-loi]]).</p></details>
+<details class="qa"><summary>“GraphRAG tốt hơn RAG thường”</summary>
+<p>Kết quả của bài báo là cho <em>câu hỏi toàn cục</em> và đo bằng tính toàn diện và tính đa dạng[[cite:edge2024graphrag]]. Với câu hỏi tra cứu chi tiết (“phí rút tiền là bao nhiêu?”), không có lý do để kỳ vọng GraphRAG tốt hơn, trong khi chi phí lập chỉ mục cao hơn nhiều.</p></details>
+<details class="qa"><summary>Không đặt giới hạn số bước cho agent</summary>
+<p>Agent có thể lặp lại một tìm kiếm không có kết quả, hoặc “cẩn thận” kiểm tra thêm mãi. Hãy luôn đặt giới hạn số bước, ngân sách token và thời gian. Khi chạm giới hạn, trả lời với những gì đã có và nói rõ phần còn thiếu.</p></details>
+<details class="qa"><summary>Chỉ đánh giá câu trả lời cuối của agent</summary>
+<p>Hai agent có cùng tỷ lệ đúng có thể khác nhau gấp ba lần về số bước. Hãy log và đánh giá cả quỹ đạo: số lần gọi công cụ, truy vấn có hợp lý không, có bước thừa không, chi phí của từng câu hỏi.</p></details>
+
+<h2>Tự kiểm tra</h2>
+<div class="callout kiem-chung">
+<ol>
+<li>Lấy 100 câu hỏi thật gần nhất và gán nhãn: tra cứu đơn giản, nhiều bước, sinh dài, toàn cục. Tỷ lệ mỗi loại là bao nhiêu? Kỹ thuật nào trong bảng so sánh nhắm vào loại chiếm tỷ lệ lớn nhất?</li>
+<li>Với các câu hỏi nhiều bước mà hệ thống trả lời sai: nếu tách câu hỏi bằng tay rồi truy hồi từng phần, hệ thống có tìm được tài liệu đúng không? Nếu có, tách truy vấn có thể đã đủ. Nếu không, vấn đề nằm ở dữ liệu hoặc truy hồi cơ bản.</li>
+<li>Nếu đã có agent: phân bố số bước trên mỗi câu hỏi trông thế nào? Bao nhiêu phần trăm câu hỏi chạm giới hạn số bước? Chi phí trung bình và p95 so với pipeline cố định ra sao?</li>
+<li>Trước khi chạy GraphRAG trên toàn kho, chạy thử trên 1% dữ liệu, ghi lại số token đã dùng, rồi ngoại suy chi phí cho toàn kho.</li>
+</ol>
+</div>
+
+<h2>Đọc tiếp</h2>
+<ul>
+<li>Bài tiếp theo: [[link:nang-cao/tinh-huong-ung-dung]]. Các bài toán thực tế đòi hỏi gì, và khi nào cần tới các kỹ thuật trong bài này.</li>
+<li>Nền tảng cần nắm trước: [[link:tim-kiem/xu-ly-truy-van]] (tách và viết lại truy vấn), [[link:danh-gia/chan-doan-loi]] (biết lỗi nằm ở đâu trước khi chọn kỹ thuật).</li>
+<li>Ngân sách độ trễ và chi phí cho vòng lặp nhiều bước: [[link:van-hanh/chi-phi-do-tre]].</li>
+<li>Rủi ro khi agent có công cụ: [[link:van-hanh/bao-mat]].</li>
+<li>Bài báo gốc: IRCoT[[cite:trivedi2023ircot]], FLARE[[cite:jiang2023flare]], Self-RAG[[cite:asai2023selfrag]], ReAct[[cite:yao2023react]], GraphRAG[[cite:edge2024graphrag]]. Khảo sát tổng quan để tra cứu thêm: Gao et al. 2023[[cite:gao2023survey]].</li>
+</ul>

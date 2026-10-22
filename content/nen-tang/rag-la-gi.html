@@ -1,0 +1,143 @@
+---
+{
+  "title": "RAG là gì và giải quyết vấn đề gì?",
+  "navTitle": "RAG là gì?",
+  "description": "Vì sao mô hình ngôn ngữ cần tra cứu tài liệu bên ngoài, RAG hoạt động theo những bước nào, và những gì RAG không giải quyết được.",
+  "lead": "Mô hình ngôn ngữ lớn (LLM) trả lời trôi chảy nhưng không biết dữ liệu riêng của bạn, không biết sự kiện sau thời điểm huấn luyện và không cho bạn biết nó lấy thông tin từ đâu. RAG giải quyết cả ba bằng một ý tưởng đơn giản: tra cứu trước, trả lời sau.",
+  "level": "Người mới",
+  "reviewed": "2026-10-22",
+  "kinds": ["nen-tang", "nghien-cuu", "nhan-dinh"]
+}
+---
+<div class="callout tom-tat">
+<ul>
+<li><strong>RAG</strong> (Retrieval-Augmented Generation — sinh có tăng cường truy hồi) là cách cho LLM đọc các đoạn tài liệu liên quan <em>ngay lúc trả lời</em>, thay vì chỉ dựa vào những gì nó “nhớ” từ lúc huấn luyện.</li>
+<li>Pipeline cơ bản gồm hai pha: <strong>lập chỉ mục</strong> (làm một lần, cập nhật định kỳ) và <strong>truy vấn</strong> (mỗi câu hỏi: truy hồi → ghép ngữ cảnh → sinh câu trả lời).</li>
+<li>RAG hữu ích nhất khi kiến thức cần dùng <em>nằm trong tài liệu</em>, <em>thay đổi thường xuyên</em> hoặc <em>cần trích dẫn</em>. Nó không dạy mô hình kỹ năng mới hay thay đổi văn phong.</li>
+<li>Hầu hết lỗi của RAG trong thực tế đến từ khâu truy hồi và dữ liệu, không phải từ mô hình sinh.</li>
+</ul>
+</div>
+
+<h2>Ba giới hạn của một LLM “đứng một mình”</h2>
+<p>Hãy hình dung bạn hỏi một trợ lý AI: <em>“Theo chính sách công ty mình, nhân viên thử việc có được nghỉ phép năm không?”</em> Một LLM không có truy hồi sẽ gặp ba vấn đề:</p>
+<ol>
+<li><strong>Không có dữ liệu riêng.</strong> Sổ tay nhân sự nội bộ của bạn không nằm trong dữ liệu huấn luyện. Mô hình chỉ có thể đoán dựa trên “chính sách thường thấy” — và trình bày phỏng đoán đó bằng giọng điệu rất tự tin.</li>
+<li><strong>Kiến thức bị đóng băng.</strong> Tham số của mô hình phản ánh dữ liệu tới một thời điểm cắt (knowledge cutoff). Chính sách sửa đổi tuần trước, giá sản phẩm hôm nay, phiên bản thư viện mới phát hành — mô hình không thể biết.</li>
+<li><strong>Không kiểm chứng được.</strong> Ngay cả khi trả lời đúng, mô hình không chỉ ra được câu trả lời dựa trên văn bản nào. Người dùng không có cách nhanh để phân biệt câu trả lời đúng với câu trả lời “nghe có vẻ đúng”.</li>
+</ol>
+<p>Hiện tượng mô hình tạo ra nội dung trôi chảy nhưng sai hoặc không có căn cứ thường được gọi là <strong>hallucination</strong> (ảo giác). RAG không loại bỏ hoàn toàn hiện tượng này, nhưng thay đổi bản chất câu hỏi: từ “mô hình có nhớ đúng không?” thành “hệ thống có tìm đúng tài liệu và mô hình có bám sát tài liệu không?” — hai câu hỏi mà ta <em>đo được và sửa được</em>.</p>
+
+<h2>Ý tưởng cốt lõi: sách mở thay vì thi nhớ</h2>
+<p>Một phép so sánh hữu ích: LLM không có truy hồi giống thí sinh làm bài thi <em>đóng sách</em> — phải dựa hoàn toàn vào trí nhớ. RAG biến nó thành bài thi <em>mở sách</em>: trước khi trả lời, hệ thống tìm những trang liên quan nhất và đặt chúng trước mặt thí sinh. Thí sinh vẫn cần biết đọc hiểu và tổng hợp (năng lực của LLM), nhưng thông tin cụ thể đến từ tài liệu.</p>
+<p>Về mặt kỹ thuật, tri thức được chia thành hai loại:</p>
+<ul>
+<li><strong>Tri thức tham số (parametric)</strong>: được nén vào trọng số mô hình qua huấn luyện. Rộng, nhưng mờ, khó cập nhật và khó truy nguồn.</li>
+<li><strong>Tri thức phi tham số (non-parametric)</strong>: nằm trong một kho tài liệu bên ngoài có thể tìm kiếm. Cập nhật bằng cách thêm/xóa tài liệu, không cần huấn luyện lại, và mỗi mẩu thông tin có địa chỉ cụ thể.</li>
+</ul>
+<p>Cách phân chia này chính là khung lý thuyết trong bài báo đặt tên RAG của Lewis và cộng sự năm 2020, kết hợp một bộ truy hồi dense với mô hình sinh seq2seq[[cite:lewis2020]]. Cùng thời điểm, REALM đưa truy hồi vào ngay giai đoạn tiền huấn luyện[[cite:guu2020]], còn RETRO cho thấy một mô hình nhỏ hơn nhiều, khi được truy hồi từ kho hàng nghìn tỷ token, có thể đạt hiệu năng tương đương mô hình lớn trên một số benchmark mô hình hóa ngôn ngữ[[cite:borgeaud2022]].</p>
+
+<div class="callout nghien-cuu">
+<p><strong>RAG “gốc” khác RAG ngày nay.</strong> Trong bài báo năm 2020, bộ mã hóa truy vấn và mô hình sinh được <em>huấn luyện chung</em> đầu-cuối. Phần lớn hệ thống RAG hiện nay thì ghép các thành phần có sẵn — một mô hình embedding, một vector database, một LLM qua API — và <em>không huấn luyện chung</em>. Tên gọi giữ nguyên, nhưng khi đọc kết quả thí nghiệm trong các bài báo đời đầu, cần nhớ điều kiện khác biệt này.</p>
+</div>
+
+<h2>RAG hoạt động thế nào: hai pha</h2>
+<figure class="diagram">
+<svg viewBox="0 0 760 330" width="760" role="img" aria-labelledby="d1t d1d">
+<title id="d1t">Sơ đồ hai pha của RAG</title>
+<desc id="d1d">Pha lập chỉ mục: tài liệu được làm sạch, cắt thành chunk, chuyển thành embedding và lưu vào chỉ mục. Pha truy vấn: câu hỏi được truy hồi trên chỉ mục, lấy top-k đoạn, ghép vào prompt và LLM sinh câu trả lời có trích dẫn.</desc>
+<defs><marker id="ah1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="arrowhead"/></marker></defs>
+<text x="20" y="26" font-size="13" font-weight="700" class="muted">PHA 1 · LẬP CHỈ MỤC (offline, khi dữ liệu thay đổi)</text>
+<rect x="20" y="40" width="120" height="56" rx="8" class="box"/><text x="80" y="64" font-size="14" text-anchor="middle">Tài liệu</text><text x="80" y="82" font-size="11.5" text-anchor="middle" class="muted">PDF, web, wiki…</text>
+<rect x="170" y="40" width="120" height="56" rx="8" class="box"/><text x="230" y="64" font-size="14" text-anchor="middle">Làm sạch</text><text x="230" y="82" font-size="11.5" text-anchor="middle" class="muted">trích xuất, khử trùng</text>
+<rect x="320" y="40" width="120" height="56" rx="8" class="box"/><text x="380" y="64" font-size="14" text-anchor="middle">Chunking</text><text x="380" y="82" font-size="11.5" text-anchor="middle" class="muted">+ metadata</text>
+<rect x="470" y="40" width="120" height="56" rx="8" class="box"/><text x="530" y="64" font-size="14" text-anchor="middle">Embedding</text><text x="530" y="82" font-size="11.5" text-anchor="middle" class="muted">văn bản → vector</text>
+<rect x="620" y="40" width="120" height="56" rx="8" class="box-a"/><text x="680" y="64" font-size="14" text-anchor="middle" font-weight="700">Chỉ mục</text><text x="680" y="82" font-size="11.5" text-anchor="middle" class="muted">vector + từ khóa</text>
+<path d="M140 68h28M290 68h28M440 68h28M590 68h28" class="ln" marker-end="url(#ah1)"/>
+<text x="20" y="160" font-size="13" font-weight="700" class="muted">PHA 2 · TRUY VẤN (online, mỗi câu hỏi)</text>
+<rect x="20" y="176" width="120" height="56" rx="8" class="box-b"/><text x="80" y="200" font-size="14" text-anchor="middle">Câu hỏi</text><text x="80" y="218" font-size="11.5" text-anchor="middle" class="muted">của người dùng</text>
+<rect x="170" y="176" width="120" height="56" rx="8" class="box"/><text x="230" y="200" font-size="14" text-anchor="middle">Xử lý truy vấn</text><text x="230" y="218" font-size="11.5" text-anchor="middle" class="muted">viết lại, embed</text>
+<rect x="320" y="176" width="120" height="56" rx="8" class="box-a"/><text x="380" y="200" font-size="14" text-anchor="middle" font-weight="700">Truy hồi</text><text x="380" y="218" font-size="11.5" text-anchor="middle" class="muted">top-k + rerank</text>
+<rect x="470" y="176" width="120" height="56" rx="8" class="box"/><text x="530" y="200" font-size="14" text-anchor="middle">Ghép ngữ cảnh</text><text x="530" y="218" font-size="11.5" text-anchor="middle" class="muted">prompt + đoạn trích</text>
+<rect x="620" y="176" width="120" height="56" rx="8" class="box-w"/><text x="680" y="200" font-size="14" text-anchor="middle" font-weight="700">LLM sinh</text><text x="680" y="218" font-size="11.5" text-anchor="middle" class="muted">trả lời + trích dẫn</text>
+<path d="M140 204h28M290 204h28M440 204h28M590 204h28" class="ln" marker-end="url(#ah1)"/>
+<path d="M680 96 V140 H380 V174" class="ln-d" marker-end="url(#ah1)"/>
+<text x="530" y="134" font-size="11.5" text-anchor="middle" class="muted">tìm kiếm trên chỉ mục</text>
+<rect x="20" y="262" width="720" height="50" rx="8" class="box-v"/>
+<text x="380" y="284" font-size="13" text-anchor="middle">Đánh giá &amp; giám sát xuyên suốt: truy hồi có tìm đúng? câu trả lời có bám tài liệu?</text>
+<text x="380" y="302" font-size="11.5" text-anchor="middle" class="muted">→ Phần 6: Đánh giá, chẩn đoán &amp; cải tiến</text>
+</svg>
+<figcaption>Hai pha của một hệ thống RAG điển hình. Mỗi ô tương ứng với một phần của sổ tay này.</figcaption>
+</figure>
+
+<h3>Pha 1 — Lập chỉ mục (indexing)</h3>
+<ol class="steps">
+<li><strong>Thu thập và làm sạch</strong>: lấy văn bản từ PDF, trang web, wiki, cơ sở dữ liệu; loại bỏ phần thừa (menu, header lặp lại), khử trùng lặp. Xem [[link:du-lieu/thu-thap-lam-sach]].</li>
+<li><strong>Chunking</strong>: cắt tài liệu dài thành các đoạn (chunk) vừa đủ nhỏ để truy hồi chính xác và vừa đủ lớn để giữ nghĩa. Gắn metadata như tiêu đề, nguồn, ngày, quyền truy cập. Xem [[link:du-lieu/chunking]].</li>
+<li><strong>Embedding</strong>: dùng một mô hình embedding chuyển mỗi chunk thành một vector số, sao cho các đoạn có nghĩa gần nhau thì vector gần nhau. Xem [[link:truy-hoi/embedding]].</li>
+<li><strong>Lưu chỉ mục</strong>: lưu vector vào chỉ mục hỗ trợ tìm kiếm lân cận gần đúng, thường kèm một chỉ mục từ khóa (BM25). Xem [[link:truy-hoi/vector-index]].</li>
+</ol>
+
+<h3>Pha 2 — Truy vấn (query time)</h3>
+<ol class="steps">
+<li><strong>Xử lý truy vấn</strong>: chuyển câu hỏi thành vector (và có thể viết lại, tách nhỏ câu hỏi phức tạp). Xem [[link:tim-kiem/xu-ly-truy-van]].</li>
+<li><strong>Truy hồi</strong>: tìm <em>k</em> chunk liên quan nhất, thường kết hợp tìm kiếm ngữ nghĩa với từ khóa, rồi xếp hạng lại bằng một mô hình mạnh hơn. Xem [[link:tim-kiem/hybrid-search]] và [[link:tim-kiem/reranking]].</li>
+<li><strong>Ghép ngữ cảnh</strong>: đặt các chunk vào prompt cùng hướng dẫn rõ ràng (“chỉ trả lời dựa trên tài liệu dưới đây; nếu không có, hãy nói không biết”). Xem [[link:sinh/xay-dung-context]].</li>
+<li><strong>Sinh câu trả lời</strong>: LLM tổng hợp câu trả lời và chỉ ra đoạn nào làm căn cứ. Xem [[link:sinh/trich-dan-grounding]].</li>
+</ol>
+
+<h2>Một ví dụ cụ thể</h2>
+<p>Quay lại câu hỏi về nghỉ phép của nhân viên thử việc. Giả sử sổ tay nhân sự đã được lập chỉ mục:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Bước</th><th>Điều xảy ra</th></tr></thead>
+<tbody>
+<tr><td>Câu hỏi</td><td>“Nhân viên thử việc có được nghỉ phép năm không?”</td></tr>
+<tr><td>Truy hồi</td><td>Top-3 chunk: (1) “Mục 4.2 — Nghỉ phép năm: áp dụng cho nhân viên đã ký hợp đồng lao động chính thức…”, (2) “Mục 2.1 — Thời gian thử việc tối đa 60 ngày…”, (3) “Mục 4.5 — Nghỉ không lương…”</td></tr>
+<tr><td>Prompt</td><td>Hướng dẫn hệ thống + 3 chunk (kèm mã mục) + câu hỏi</td></tr>
+<tr><td>Câu trả lời</td><td>“Theo Mục 4.2, nghỉ phép năm áp dụng cho nhân viên đã ký hợp đồng chính thức, nên trong thời gian thử việc (tối đa 60 ngày, Mục 2.1) bạn chưa được hưởng chế độ này. Bạn có thể xin nghỉ không lương theo Mục 4.5.”</td></tr>
+</tbody></table></div>
+<p>Hãy để ý ba điều. Thứ nhất, câu trả lời <em>tổng hợp</em> từ nhiều chunk — đây là việc LLM làm tốt. Thứ hai, mỗi nhận định có mã mục để người dùng tự kiểm tra. Thứ ba, nếu bước truy hồi bỏ sót Mục 4.2 (ví dụ vì tài liệu dùng chữ “phép năm” còn người hỏi dùng “ngày nghỉ có lương”), câu trả lời sẽ sai hoặc thiếu <em>dù LLM rất giỏi</em>. Đó là lý do phần lớn sổ tay này dành cho khâu dữ liệu và truy hồi.</p>
+
+<h2>RAG giải quyết được gì — và không giải quyết được gì</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Nhu cầu</th><th>RAG có giúp không?</th><th>Ghi chú</th></tr></thead>
+<tbody>
+<tr><td>Trả lời dựa trên tài liệu nội bộ / riêng tư</td><td>✅ Rất phù hợp</td><td>Lý do phổ biến nhất để dùng RAG.</td></tr>
+<tr><td>Thông tin thay đổi thường xuyên</td><td>✅ Phù hợp</td><td>Cập nhật chỉ mục, không cần huấn luyện lại.</td></tr>
+<tr><td>Trích dẫn, truy nguồn</td><td>✅ Phù hợp</td><td>Mỗi chunk có địa chỉ; nhưng cần kiểm tra trích dẫn có thật sự ủng hộ nhận định.</td></tr>
+<tr><td>Phân quyền theo người dùng</td><td>✅ Có thể</td><td>Lọc theo metadata quyền truy cập khi truy hồi. Xem [[link:van-hanh/bao-mat]].</td></tr>
+<tr><td>Dạy mô hình định dạng, văn phong, kỹ năng mới</td><td>⚠️ Hạn chế</td><td>Fine-tuning hoặc ví dụ trong prompt thường hiệu quả hơn.</td></tr>
+<tr><td>Câu hỏi tổng hợp toàn bộ kho (“chủ đề chính của 10.000 email này là gì?”)</td><td>⚠️ Khó với RAG cơ bản</td><td>Top-k chỉ thấy vài đoạn; cần hướng như GraphRAG hoặc tóm tắt phân cấp. Xem [[link:nang-cao/agentic-graphrag]].</td></tr>
+<tr><td>Tính toán, truy vấn dữ liệu có cấu trúc</td><td>⚠️ Không phải công cụ tốt nhất</td><td>Gọi SQL/API (tool use) chính xác hơn tìm văn bản.</td></tr>
+<tr><td>Tài liệu nguồn sai hoặc mâu thuẫn</td><td>❌ Không</td><td>RAG khuếch đại chất lượng dữ liệu, cả tốt lẫn xấu.</td></tr>
+</tbody></table></div>
+<p>Bảng trên dẫn tới câu hỏi tự nhiên: so với fine-tuning, ngữ cảnh dài hoặc gọi công cụ thì sao? Bài tiếp theo, [[link:nen-tang/khi-nao-dung-rag]], đi sâu vào lựa chọn đó.</p>
+
+<h2>Những hiểu lầm thường gặp</h2>
+<details class="qa"><summary>“RAG = vector database”</summary>
+<p>Vector database chỉ là một cách lưu chỉ mục. Nhiều hệ thống tốt kết hợp tìm kiếm từ khóa (BM25), bộ lọc metadata và reranker; một số trường hợp chỉ cần tìm kiếm từ khóa cũng đạt chất lượng tốt. Trên benchmark BEIR gồm 18 bộ dữ liệu đa miền, BM25 là một baseline zero-shot rất khó vượt và nhiều mô hình dense kém tổng quát hóa ra ngoài miền huấn luyện[[cite:thakur2021]]. “R” trong RAG là <em>retrieval</em> nói chung, không riêng vector.</p></details>
+<details class="qa"><summary>“Có RAG thì mô hình sẽ không bịa nữa”</summary>
+<p>Không đúng. Mô hình vẫn có thể bỏ qua ngữ cảnh, trộn kiến thức tham số với tài liệu, hoặc diễn giải sai đoạn trích. Ngữ cảnh chứa đoạn không liên quan cũng có thể làm mô hình trả lời kém đi[[cite:shi2023]]. Vì vậy cần đo riêng độ trung thực (faithfulness) — xem [[link:danh-gia/danh-gia-generation]].</p></details>
+<details class="qa"><summary>“Ngữ cảnh dài hàng triệu token sẽ làm RAG lỗi thời”</summary>
+<p>Ngữ cảnh dài làm thay đổi đánh đổi, nhưng không xóa bỏ nhu cầu truy hồi: kho dữ liệu doanh nghiệp thường lớn hơn nhiều so với cửa sổ ngữ cảnh, chi phí và độ trễ tăng theo số token, và mô hình không phải lúc nào cũng sử dụng đều thông tin ở mọi vị trí trong ngữ cảnh dài[[cite:liu2023lost]]. Phân tích chi tiết ở [[link:nen-tang/khi-nao-dung-rag]].</p></details>
+<details class="qa"><summary>“Chỉ cần chọn LLM tốt nhất là đủ”</summary>
+<p>Trong một nghiên cứu tổng kết từ ba hệ thống RAG thực tế, Barnett và cộng sự liệt kê bảy điểm lỗi; phần lớn nằm trước bước sinh: nội dung không có trong kho, tài liệu đúng không lọt vào top-k, hoặc bị loại khi ghép ngữ cảnh[[cite:barnett2024]]. Đổi LLM không sửa được tài liệu bị truy hồi sai.</p></details>
+
+<div class="callout nhan-dinh">
+<p>Theo kinh nghiệm của người biên soạn, cách hiệu quả nhất để học RAG là xây một pipeline tối thiểu thật sớm, tạo ngay một bộ câu hỏi kiểm thử khoảng 30–50 câu với đáp án biết trước, rồi cải tiến từng thành phần <em>dựa trên số đo</em>. Đọc về hàng chục kỹ thuật nâng cao trước khi có bộ kiểm thử thường dẫn đến tối ưu những thứ không phải điểm nghẽn. Đây là nhận định thực hành, không phải kết quả nghiên cứu; xem [[link:thuc-hanh/rag-dau-tien]] để bắt đầu.</p>
+</div>
+
+<h2>Tự kiểm tra hiểu biết</h2>
+<div class="callout kiem-chung">
+<ol>
+<li>Kể ra ba giới hạn của LLM mà RAG nhắm tới. Giới hạn nào RAG <em>không</em> giải quyết hoàn toàn?</li>
+<li>Nếu chính sách thay đổi mỗi tuần, vì sao RAG phù hợp hơn fine-tuning lại mô hình mỗi tuần?</li>
+<li>Trong ví dụ nghỉ phép, nếu câu trả lời sai, bạn sẽ kiểm tra bước nào đầu tiên? (Gợi ý: xem các chunk được truy hồi trước khi nghi ngờ LLM.)</li>
+</ol>
+</div>
+
+<h2>Đọc tiếp</h2>
+<ul>
+<li>Bài tiếp theo: [[link:nen-tang/khi-nao-dung-rag]] — so sánh với fine-tuning, long context, tool use.</li>
+<li>Muốn thấy toàn cảnh kiến trúc trước: [[link:nen-tang/kien-truc-tong-quan]].</li>
+<li>Bài báo gốc nên đọc: Lewis et al. 2020[[cite:lewis2020]]; khảo sát tổng quan để tra cứu: Gao et al. 2023[[cite:gao2023survey]].</li>
+</ul>

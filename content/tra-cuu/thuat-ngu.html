@@ -1,0 +1,273 @@
+---
+{
+  "title": "Thuật ngữ RAG",
+  "navTitle": "Thuật ngữ",
+  "description": "Bảng thuật ngữ A–Z về Retrieval-Augmented Generation: định nghĩa ngắn bằng tiếng Việt cho hơn 70 khái niệm từ ANN, BM25, chunk tới vector database, kèm liên kết tới bài giải thích chi tiết.",
+  "lead": "Tài liệu về RAG dùng dày đặc thuật ngữ tiếng Anh, nhiều từ có nghĩa hẹp hơn vẻ ngoài của nó. Trang này cho định nghĩa ngắn gọn của từng khái niệm và chỉ tới bài trong sổ tay nơi khái niệm đó được giải thích kỹ.",
+  "level": "Tra cứu",
+  "reviewed": "2026-10-22",
+  "standalone": true,
+  "kinds": ["nen-tang"]
+}
+---
+<p>Thuật ngữ được sắp theo tên tiếng Anh, vì đó là cách chúng xuất hiện trong tài liệu, mã nguồn và giao diện công cụ. Mỗi định nghĩa cố ý ngắn; khi cần hiểu cơ chế, đánh đổi và cách kiểm chứng, hãy theo liên kết tới bài viết tương ứng. Dùng ô tìm kiếm (phím <kbd>/</kbd>) để tìm nhanh theo từ khóa.</p>
+
+<nav class="az" aria-label="Nhảy tới chữ cái">
+<a href="#chu-a">A</a> <a href="#chu-b">B</a> <a href="#chu-c">C</a> <a href="#chu-d">D</a> <a href="#chu-e">E</a> <a href="#chu-f">F</a> <a href="#chu-g">G</a> <a href="#chu-h">H</a> <a href="#chu-i">I</a> <a href="#chu-k">K</a> <a href="#chu-l">L</a> <a href="#chu-m">M</a> <a href="#chu-n">N</a> <a href="#chu-o">O</a> <a href="#chu-p">P</a> <a href="#chu-q">Q</a> <a href="#chu-r">R</a> <a href="#chu-s">S</a> <a href="#chu-t">T</a> <a href="#chu-v">V</a> <a href="#chu-z">Z</a>
+</nav>
+
+<h2 id="chu-a">A</h2>
+<dl class="glossary">
+<dt id="agentic-rag">Agentic RAG</dt>
+<dd>Biến thể trong đó LLM đóng vai tác tử (agent): tự quyết định có cần truy hồi không, truy vấn gì, gọi công cụ nào và khi nào dừng, thay vì chạy một pipeline cố định “truy hồi một lần rồi sinh”. Linh hoạt hơn nhưng khó dự đoán chi phí, độ trễ và khó đánh giá hơn. Xem [[link:nang-cao/agentic-graphrag]].</dd>
+<dt id="ann">ANN (Approximate Nearest Neighbor)</dt>
+<dd>Tìm kiếm lân cận gần đúng: tìm các vector gần vector truy vấn nhất mà không so sánh với toàn bộ kho, chấp nhận đôi khi bỏ sót để đổi lấy tốc độ. HNSW, IVF là các thuật toán ANN phổ biến. Xem [[link:truy-hoi/vector-index]].</dd>
+<dt id="answer-relevance">Answer relevance</dt>
+<dd>Mức độ câu trả lời thực sự đáp đúng câu hỏi được đặt ra (khác với việc câu trả lời có đúng sự thật hay không). Là một trong các chỉ số được RAGAS đề xuất[[cite:es2023ragas]]. Xem [[link:danh-gia/danh-gia-generation]].</dd>
+</dl>
+
+<h2 id="chu-b">B</h2>
+<dl class="glossary">
+<dt id="beir">BEIR</dt>
+<dd>Benchmark gồm 18 bộ dữ liệu truy hồi đa miền, dùng để đánh giá khả năng tổng quát hóa zero-shot của mô hình truy hồi. Nổi tiếng vì cho thấy BM25 là baseline rất khó vượt ngoài miền huấn luyện[[cite:thakur2021]].</dd>
+<dt id="bi-encoder">Bi-encoder</dt>
+<dd>Kiến trúc mã hóa câu hỏi và tài liệu <em>riêng rẽ</em> thành hai vector rồi so sánh bằng cosine hoặc tích vô hướng. Vì vector tài liệu tính trước được, bi-encoder đủ nhanh để tìm trên hàng triệu đoạn; DPR là ví dụ kinh điển[[cite:karpukhin2020]]. Đối lập với <a href="#cross-encoder">cross-encoder</a>. Xem [[link:truy-hoi/embedding]].</dd>
+<dt id="bm25">BM25</dt>
+<dd>Hàm xếp hạng từ vựng (lexical) dựa trên tần suất từ trong tài liệu, độ hiếm của từ trong kho (IDF) và chuẩn hóa theo độ dài tài liệu, với hai tham số k1 và b[[cite:robertson2009]]. Vẫn là thành phần quan trọng của hybrid search. Xem [[link:tim-kiem/hybrid-search]].</dd>
+</dl>
+
+<h2 id="chu-c">C</h2>
+<dl class="glossary">
+<dt id="chunk">Chunk (đoạn cắt)</dt>
+<dd>Một mẩu văn bản được cắt ra từ tài liệu gốc, là đơn vị được lập chỉ mục, truy hồi và đưa vào prompt. Kích thước và ranh giới chunk ảnh hưởng trực tiếp tới chất lượng truy hồi. Xem [[link:du-lieu/chunking]].</dd>
+<dt id="chunking">Chunking</dt>
+<dd>Quá trình cắt tài liệu thành chunk: theo số token cố định, theo cấu trúc (đoạn, mục, tiêu đề), theo câu, hoặc theo ngữ nghĩa. Xem [[link:du-lieu/chunking]].</dd>
+<dt id="citation">Citation (trích dẫn)</dt>
+<dd>Chỉ dẫn trong câu trả lời trỏ tới đoạn nguồn làm căn cứ cho một nhận định, để người dùng tự kiểm chứng. Trích dẫn tồn tại chưa chắc đã đúng: cần kiểm tra đoạn được trích có thật sự ủng hộ nhận định. Xem [[link:sinh/trich-dan-grounding]].</dd>
+<dt id="colbert">ColBERT</dt>
+<dd>Mô hình truy hồi kiểu <a href="#late-interaction">late interaction</a>: giữ một vector cho <em>mỗi token</em> thay vì một vector cho cả đoạn, rồi so khớp từng token truy vấn với token tài liệu. Thường chính xác hơn bi-encoder một vector nhưng tốn bộ nhớ chỉ mục hơn nhiều. Xem [[link:truy-hoi/embedding]].</dd>
+<dt id="context-precision">Context precision / context recall</dt>
+<dd>Cặp chỉ số đánh giá ngữ cảnh truy hồi: precision đo tỷ lệ chunk đưa vào prompt thực sự liên quan; recall đo ngữ cảnh có chứa đủ thông tin cần cho câu trả lời đúng hay không. Xem [[link:danh-gia/do-luong-retrieval]].</dd>
+<dt id="context-window">Context window (cửa sổ ngữ cảnh)</dt>
+<dd>Số token tối đa một LLM xử lý được trong một lần gọi, gồm cả prompt, tài liệu truy hồi và câu trả lời. Cửa sổ lớn không có nghĩa mô hình dùng đều thông tin ở mọi vị trí[[cite:liu2023lost]]. Xem [[link:sinh/xay-dung-context]].</dd>
+<dt id="contextual-chunk">Contextual chunk header</dt>
+<dd>Kỹ thuật ghép thêm ngữ cảnh (tiêu đề tài liệu, tên mục, tóm tắt ngắn) vào trước nội dung chunk khi lập chỉ mục, để chunk “tự giải thích” được nó thuộc về đâu. Xem [[link:du-lieu/metadata-va-bieu-dien]].</dd>
+<dt id="cosine-similarity">Cosine similarity</dt>
+<dd>Độ tương đồng giữa hai vector bằng cosine của góc giữa chúng, từ −1 đến 1, không phụ thuộc độ dài vector. Với vector đã chuẩn hóa về độ dài 1, cosine bằng tích vô hướng[[cite:sbert-similarity]]. Xem [[link:truy-hoi/embedding]].</dd>
+<dt id="cross-encoder">Cross-encoder</dt>
+<dd>Mô hình đọc câu hỏi và tài liệu <em>cùng lúc</em> trong một lần chạy và cho ra một điểm liên quan. Chính xác hơn bi-encoder vì thấy tương tác giữa hai văn bản, nhưng không tính trước được nên chỉ dùng để xếp hạng lại một danh sách ngắn. Xem [[link:tim-kiem/reranking]].</dd>
+</dl>
+
+<h2 id="chu-d">D</h2>
+<dl class="glossary">
+<dt id="data-poisoning">Data poisoning (đầu độc dữ liệu)</dt>
+<dd>Tấn công bằng cách đưa tài liệu sai lệch hoặc chứa chỉ thị độc hại vào kho để chúng được truy hồi và ảnh hưởng câu trả lời. Xem [[link:van-hanh/bao-mat]].</dd>
+<dt id="deduplication">Deduplication (khử trùng lặp)</dt>
+<dd>Loại bỏ tài liệu hoặc chunk trùng hay gần trùng trước khi lập chỉ mục. Bản trùng chiếm chỗ trong top-k, đẩy thông tin khác ra ngoài và có thể khiến nhiều phiên bản mâu thuẫn cùng được truy hồi. Xem [[link:du-lieu/thu-thap-lam-sach]].</dd>
+<dt id="dense-retrieval">Dense retrieval</dt>
+<dd>Truy hồi bằng vector dày (mọi chiều đều có giá trị) do mô hình embedding sinh ra; so khớp theo nghĩa thay vì theo từ khóa trùng[[cite:karpukhin2020]]. Xem [[link:truy-hoi/embedding]].</dd>
+<dt id="dot-product">Dot product (tích vô hướng)</dt>
+<dd>Tổng tích từng cặp thành phần của hai vector. Là phép so sánh nhanh nhất; bằng cosine khi vector đã chuẩn hóa. Một số mô hình embedding được huấn luyện để dùng tích vô hướng không chuẩn hóa — kiểm tra thẻ mô hình. Xem [[link:truy-hoi/embedding]].</dd>
+</dl>
+
+<h2 id="chu-e">E</h2>
+<dl class="glossary">
+<dt id="embedding">Embedding</dt>
+<dd>Vector số biểu diễn một đoạn văn bản (hoặc ảnh, âm thanh) sao cho các nội dung có nghĩa gần nhau có vector gần nhau. Cũng dùng để chỉ mô hình sinh ra vector đó. Xem [[link:truy-hoi/embedding]].</dd>
+<dt id="evaluation-set">Evaluation set / golden set (bộ kiểm thử)</dt>
+<dd>Tập câu hỏi có đáp án hoặc tài liệu đúng biết trước, dùng để đo và so sánh các phiên bản hệ thống. Là điều kiện để cải tiến dựa trên số đo. Xem [[link:danh-gia/do-luong-retrieval]] và [[link:thuc-hanh/rag-dau-tien]].</dd>
+<dt id="exact-search">Exact search / kNN</dt>
+<dd>Tìm k vector gần nhất bằng cách so sánh với <em>mọi</em> vector trong kho. Kết quả chính xác tuyệt đối, chi phí tăng tuyến tính theo kích thước kho; là chuẩn đối chiếu khi đo recall của chỉ mục ANN. Xem [[link:truy-hoi/vector-index]].</dd>
+</dl>
+
+<h2 id="chu-f">F</h2>
+<dl class="glossary">
+<dt id="faithfulness">Faithfulness (độ trung thực)</dt>
+<dd>Mức độ mọi nhận định trong câu trả lời được ngữ cảnh truy hồi ủng hộ. Câu trả lời có thể đúng sự thật nhưng không trung thực (mô hình dùng kiến thức riêng), hoặc trung thực nhưng sai (tài liệu sai)[[cite:es2023ragas]]. Xem [[link:danh-gia/danh-gia-generation]].</dd>
+<dt id="fine-tuning">Fine-tuning (tinh chỉnh)</dt>
+<dd>Huấn luyện tiếp một mô hình đã có trên dữ liệu riêng để thay đổi hành vi, định dạng hoặc kiến thức. Trong thí nghiệm của Ovadia và cộng sự, RAG bổ sung kiến thức tốt hơn fine-tuning không giám sát[[cite:ovadia2023]]. Xem [[link:nen-tang/khi-nao-dung-rag]].</dd>
+<dt id="fusion-in-decoder">Fusion-in-Decoder (FiD)</dt>
+<dd>Kiến trúc mã hóa từng đoạn truy hồi riêng rẽ rồi hợp nhất chúng ở bộ giải mã khi sinh câu trả lời[[cite:izacard2021]]. Là một hướng RAG huấn luyện đầu-cuối, khác với cách ghép tài liệu vào prompt của LLM ngày nay.</dd>
+</dl>
+
+<h2 id="chu-g">G</h2>
+<dl class="glossary">
+<dt id="graphrag">GraphRAG</dt>
+<dd>Nhóm phương pháp xây đồ thị tri thức (thực thể, quan hệ, cụm chủ đề) từ kho tài liệu rồi truy hồi trên đồ thị, phù hợp câu hỏi cần tổng hợp toàn kho hoặc nối nhiều bước quan hệ. Chi phí lập chỉ mục cao hơn RAG thông thường. Xem [[link:nang-cao/agentic-graphrag]].</dd>
+<dt id="grounding">Grounding (bám nguồn)</dt>
+<dd>Việc buộc câu trả lời dựa trên nguồn cụ thể (tài liệu truy hồi, kết quả công cụ) thay vì trí nhớ tham số của mô hình, và cho phép truy ngược từ nhận định về nguồn. Xem [[link:sinh/trich-dan-grounding]].</dd>
+<dt id="guardrail">Guardrail</dt>
+<dd>Lớp kiểm soát quanh LLM: lọc đầu vào/đầu ra, kiểm tra định dạng, chặn nội dung nhạy cảm, buộc từ chối khi ngoài phạm vi. Giảm rủi ro nhưng không thay được phân quyền ở khâu truy hồi. Xem [[link:van-hanh/bao-mat]].</dd>
+</dl>
+
+<h2 id="chu-h">H</h2>
+<dl class="glossary">
+<dt id="hallucination">Hallucination (ảo giác)</dt>
+<dd>Hiện tượng mô hình sinh ra nội dung trôi chảy nhưng sai hoặc không có căn cứ. RAG giảm nhưng không loại bỏ hoàn toàn hiện tượng này. Xem [[link:nen-tang/rag-la-gi]].</dd>
+<dt id="hit-at-k">Hit@k</dt>
+<dd>Tỷ lệ câu hỏi có ít nhất một tài liệu đúng trong top-k kết quả. Với câu hỏi chỉ có một tài liệu đúng, Hit@k trùng với Recall@k. Xem [[link:danh-gia/do-luong-retrieval]].</dd>
+<dt id="hnsw">HNSW (Hierarchical Navigable Small World)</dt>
+<dd>Thuật toán ANN dựa trên đồ thị nhiều tầng: tầng trên thưa để “nhảy xa”, tầng dưới dày để tìm chính xác. Nhanh và recall cao, nhưng tốn bộ nhớ; là lựa chọn mặc định của nhiều vector database. Xem [[link:truy-hoi/vector-index]].</dd>
+<dt id="hybrid-search">Hybrid search</dt>
+<dd>Kết hợp tìm kiếm từ vựng (như BM25) với tìm kiếm vector, thường bằng cách hợp nhất hai danh sách xếp hạng (ví dụ bằng <a href="#rrf">RRF</a>), để bắt được cả khớp từ khóa chính xác lẫn khớp theo nghĩa. Xem [[link:tim-kiem/hybrid-search]].</dd>
+<dt id="hyde">HyDE (Hypothetical Document Embeddings)</dt>
+<dd>Kỹ thuật cho LLM viết một “tài liệu giả định” trả lời câu hỏi, rồi dùng embedding của tài liệu giả đó để tìm kiếm thay cho embedding của câu hỏi. Hữu ích khi câu hỏi ngắn và khác văn phong tài liệu; thêm một lần gọi LLM. Xem [[link:tim-kiem/xu-ly-truy-van]].</dd>
+</dl>
+
+<h2 id="chu-i">I</h2>
+<dl class="glossary">
+<dt id="indexing">Indexing (lập chỉ mục)</dt>
+<dd>Pha chuẩn bị offline: làm sạch, chunking, tính embedding và lưu vào cấu trúc tìm kiếm được. Chạy lại khi dữ liệu hoặc mô hình embedding thay đổi. Xem [[link:nen-tang/kien-truc-tong-quan]].</dd>
+<dt id="indirect-prompt-injection">Indirect prompt injection</dt>
+<dd>Prompt injection mà chỉ thị độc hại nằm trong dữ liệu ứng dụng truy hồi (trang web, email, tài liệu), không phải trong câu người dùng gõ[[cite:greshake2023]]. Là rủi ro đặc thù của RAG. Xem [[link:van-hanh/bao-mat]].</dd>
+<dt id="inverted-index">Inverted index (chỉ mục đảo)</dt>
+<dd>Cấu trúc ánh xạ mỗi từ tới danh sách tài liệu chứa nó; nền tảng của tìm kiếm từ khóa như BM25 trong các search engine. Xem [[link:tim-kiem/hybrid-search]].</dd>
+<dt id="ivf">IVF (Inverted File Index)</dt>
+<dd>Thuật toán ANN chia không gian vector thành nhiều cụm; khi tìm kiếm chỉ quét vài cụm gần truy vấn nhất. Tốn ít bộ nhớ hơn HNSW, thường kết hợp với PQ; chất lượng phụ thuộc số cụm được quét. Xem [[link:truy-hoi/vector-index]].</dd>
+</dl>
+
+<h2 id="chu-k">K</h2>
+<dl class="glossary">
+<dt id="knowledge-cutoff">Knowledge cutoff (mốc cắt kiến thức)</dt>
+<dd>Thời điểm cuối cùng của dữ liệu huấn luyện mô hình; mô hình không biết sự kiện sau mốc này. Là một trong những lý do chính để dùng RAG. Xem [[link:nen-tang/rag-la-gi]].</dd>
+<dt id="knowledge-graph">Knowledge graph (đồ thị tri thức)</dt>
+<dd>Biểu diễn tri thức dưới dạng nút (thực thể) và cạnh (quan hệ). Trong RAG, đồ thị có thể được xây tự động bằng LLM hoặc lấy từ hệ thống có sẵn. Xem [[link:nang-cao/agentic-graphrag]].</dd>
+</dl>
+
+<h2 id="chu-l">L</h2>
+<dl class="glossary">
+<dt id="late-interaction">Late interaction</dt>
+<dd>Cách so khớp trong đó câu hỏi và tài liệu được mã hóa riêng thành nhiều vector token, rồi mới tương tác ở bước tính điểm (ví dụ lấy độ tương đồng lớn nhất cho mỗi token truy vấn). Nằm giữa bi-encoder và cross-encoder về độ chính xác và chi phí; ColBERT là đại diện. Xem [[link:truy-hoi/embedding]].</dd>
+<dt id="llm">LLM (Large Language Model)</dt>
+<dd>Mô hình ngôn ngữ lớn, huấn luyện trên lượng văn bản khổng lồ để dự đoán token tiếp theo; trong RAG đóng vai bộ sinh câu trả lời và đôi khi cả bộ xử lý truy vấn, bộ chấm điểm. Xem [[link:nen-tang/rag-la-gi]].</dd>
+<dt id="llm-as-a-judge">LLM-as-a-judge</dt>
+<dd>Dùng một LLM để chấm điểm câu trả lời (độ đúng, faithfulness, mức liên quan) thay cho người chấm. Rẻ và nhanh, nhưng có thiên lệch riêng; cần đối chiếu với đánh giá của người trên một mẫu. Xem [[link:danh-gia/danh-gia-generation]].</dd>
+<dt id="long-context">Long context</dt>
+<dd>Cách tiếp cận đưa rất nhiều (hoặc toàn bộ) tài liệu vào cửa sổ ngữ cảnh lớn thay vì truy hồi chọn lọc. Đơn giản hơn nhưng tốn chi phí, độ trễ theo số token và không đảm bảo mô hình dùng hết thông tin. Xem [[link:nen-tang/khi-nao-dung-rag]].</dd>
+<dt id="lost-in-the-middle">Lost in the middle</dt>
+<dd>Hiện tượng được Liu và cộng sự đo trên các mô hình năm 2023: hiệu năng cao nhất khi thông tin liên quan nằm ở đầu hoặc cuối ngữ cảnh và giảm khi nằm giữa[[cite:liu2023lost]]. Mức độ có thể khác ở mô hình mới hơn. Xem [[link:sinh/xay-dung-context]].</dd>
+</dl>
+
+<h2 id="chu-m">M</h2>
+<dl class="glossary">
+<dt id="metadata">Metadata</dt>
+<dd>Thông tin mô tả đi kèm chunk: nguồn, tiêu đề, ngày, tác giả, loại tài liệu, quyền truy cập… Dùng để lọc, xếp hạng, trích dẫn và phân quyền. Xem [[link:du-lieu/metadata-va-bieu-dien]].</dd>
+<dt id="metadata-filtering">Metadata filtering</dt>
+<dd>Giới hạn tập tìm kiếm theo điều kiện trên metadata (ví dụ “chỉ văn bản còn hiệu lực”, “chỉ tài liệu người này được xem”) trước hoặc trong khi tìm kiếm vector. Là cơ chế chính để phân quyền trong RAG. Xem [[link:du-lieu/metadata-va-bieu-dien]] và [[link:van-hanh/bao-mat]].</dd>
+<dt id="mrr">MRR (Mean Reciprocal Rank)</dt>
+<dd>Trung bình của 1/hạng của kết quả đúng đầu tiên trên tập câu hỏi (0 nếu không tìm thấy). MRR = 1 khi kết quả đúng luôn đứng đầu; nhạy với vị trí hạng 1–3. Xem [[link:danh-gia/do-luong-retrieval]].</dd>
+<dt id="mteb">MTEB (Massive Text Embedding Benchmark)</dt>
+<dd>Benchmark đánh giá mô hình embedding trên nhiều loại tác vụ và ngôn ngữ; kết luận quan trọng của bài báo gốc là không có mô hình nào thắng ở mọi tác vụ[[cite:muennighoff2022]]. Xem [[link:truy-hoi/embedding]].</dd>
+<dt id="multi-query">Multi-query</dt>
+<dd>Kỹ thuật sinh nhiều cách diễn đạt của cùng một câu hỏi, truy hồi với từng biến thể rồi hợp nhất kết quả, để giảm phụ thuộc vào cách người dùng chọn từ. Xem [[link:tim-kiem/xu-ly-truy-van]].</dd>
+</dl>
+
+<h2 id="chu-n">N</h2>
+<dl class="glossary">
+<dt id="naive-rag">Naive RAG</dt>
+<dd>Tên gọi (trong khảo sát của Gao và cộng sự) cho pipeline cơ bản nhất: lập chỉ mục, truy hồi top-k, ghép vào prompt, sinh — không có xử lý truy vấn, reranking hay vòng lặp[[cite:gao2023survey]]. Xem [[link:nen-tang/kien-truc-tong-quan]].</dd>
+<dt id="ndcg">nDCG (normalized Discounted Cumulative Gain)</dt>
+<dd>Chỉ số xếp hạng cho phép mức liên quan nhiều cấp (rất liên quan, hơi liên quan…) và giảm trọng số theo vị trí; chuẩn hóa về 0–1 bằng cách chia cho thứ tự lý tưởng. Thường báo cáo ở dạng nDCG@10. Xem [[link:danh-gia/do-luong-retrieval]].</dd>
+<dt id="normalization">Normalization (chuẩn hóa vector)</dt>
+<dd>Chia vector cho độ dài của nó để có độ dài 1 (chuẩn L2), nhờ đó tích vô hướng bằng cosine. Trong sentence-transformers bật bằng <code>normalize_embeddings=True</code>[[cite:sbert-encode]]. Xem [[link:thuc-hanh/rag-dau-tien]].</dd>
+</dl>
+
+<h2 id="chu-o">O</h2>
+<dl class="glossary">
+<dt id="overlap">Overlap (chồng lấn)</dt>
+<dd>Phần văn bản lặp lại giữa hai chunk liền kề, để thông tin nằm ở mép cắt không bị tách rời. Tăng kích thước chỉ mục và có thể tạo kết quả gần trùng trong top-k. Xem [[link:du-lieu/chunking]].</dd>
+</dl>
+
+<h2 id="chu-p">P</h2>
+<dl class="glossary">
+<dt id="parametric-knowledge">Parametric knowledge (tri thức tham số)</dt>
+<dd>Tri thức được nén vào trọng số mô hình qua huấn luyện; đối lập với tri thức phi tham số nằm trong kho tài liệu bên ngoài có thể truy hồi[[cite:lewis2020]]. Xem [[link:nen-tang/rag-la-gi]].</dd>
+<dt id="parent-child-chunking">Parent-child chunking (small-to-big)</dt>
+<dd>Lập chỉ mục bằng chunk nhỏ để truy hồi chính xác, nhưng khi đưa vào prompt thì thay bằng chunk “cha” lớn hơn chứa nó, để mô hình có đủ ngữ cảnh. Xem [[link:du-lieu/chunking]].</dd>
+<dt id="pq">PQ (Product Quantization)</dt>
+<dd>Kỹ thuật nén vector: chia vector thành nhiều đoạn con và thay mỗi đoạn bằng mã của tâm cụm gần nhất. Giảm bộ nhớ nhiều lần, đổi lại sai số khi tính khoảng cách; thường dùng cùng IVF. Xem [[link:truy-hoi/vector-index]].</dd>
+<dt id="precision-at-k">Precision@k</dt>
+<dd>Tỷ lệ kết quả liên quan trong k kết quả đầu tiên. Quan trọng khi mọi chunk đưa vào prompt đều tốn chi phí và có thể gây nhiễu. Xem [[link:danh-gia/do-luong-retrieval]].</dd>
+<dt id="prompt">Prompt</dt>
+<dd>Toàn bộ văn bản gửi cho LLM trong một lần gọi: hướng dẫn hệ thống, tài liệu truy hồi, lịch sử hội thoại và câu hỏi. Xem [[link:sinh/xay-dung-context]].</dd>
+<dt id="prompt-injection">Prompt injection</dt>
+<dd>Tấn công chèn chỉ thị vào đầu vào của LLM để khiến nó làm điều nhà phát triển không muốn (bỏ qua hướng dẫn, tiết lộ dữ liệu, gọi công cụ). Đứng đầu danh mục rủi ro OWASP cho ứng dụng LLM 2025[[cite:owasp2025]]. Xem [[link:van-hanh/bao-mat]].</dd>
+</dl>
+
+<h2 id="chu-q">Q</h2>
+<dl class="glossary">
+<dt id="quantization">Quantization (lượng tử hóa)</dt>
+<dd>Biểu diễn số bằng ít bit hơn (ví dụ float32 → int8 hoặc nhị phân) để giảm bộ nhớ và tăng tốc, áp dụng cho embedding hoặc trọng số mô hình; đổi lại mất một phần độ chính xác cần đo lại. Xem [[link:truy-hoi/vector-index]].</dd>
+<dt id="query">Query (truy vấn)</dt>
+<dd>Chuỗi được dùng để tìm kiếm trong chỉ mục. Có thể là nguyên văn câu hỏi của người dùng hoặc một phiên bản đã được viết lại, tách nhỏ, mở rộng. Xem [[link:tim-kiem/xu-ly-truy-van]].</dd>
+<dt id="query-decomposition">Query decomposition</dt>
+<dd>Tách câu hỏi phức tạp nhiều ý (“so sánh chính sách A năm 2024 và 2025”) thành các câu hỏi con, truy hồi riêng cho từng câu rồi tổng hợp. Xem [[link:tim-kiem/xu-ly-truy-van]].</dd>
+<dt id="query-expansion">Query expansion</dt>
+<dd>Bổ sung từ đồng nghĩa, từ liên quan hoặc thuật ngữ chuyên ngành vào truy vấn để tăng khả năng khớp, đặc biệt hữu ích với tìm kiếm từ khóa. Xem [[link:tim-kiem/xu-ly-truy-van]].</dd>
+<dt id="query-rewriting">Query rewriting</dt>
+<dd>Dùng LLM hoặc quy tắc viết lại câu hỏi thành truy vấn tốt hơn: bổ sung ngữ cảnh hội thoại (“nó” là gì), sửa lỗi chính tả, chuyển văn nói sang văn viết. Xem [[link:tim-kiem/xu-ly-truy-van]].</dd>
+</dl>
+
+<h2 id="chu-r">R</h2>
+<dl class="glossary">
+<dt id="rag">RAG (Retrieval-Augmented Generation)</dt>
+<dd>Sinh có tăng cường truy hồi: truy hồi các đoạn tài liệu liên quan tại thời điểm trả lời rồi đưa chúng cho mô hình sinh làm căn cứ. Tên gọi xuất phát từ bài báo của Lewis và cộng sự năm 2020[[cite:lewis2020]]. Xem [[link:nen-tang/rag-la-gi]].</dd>
+<dt id="ragas">RAGAS</dt>
+<dd>Khung đánh giá RAG tự động đề xuất các chỉ số như faithfulness, answer relevance, context relevance mà không cần nhãn tham chiếu cho mọi câu[[cite:es2023ragas]]. Xem [[link:danh-gia/danh-gia-generation]].</dd>
+<dt id="recall-at-k">Recall@k</dt>
+<dd>Tỷ lệ tài liệu liên quan (trong tổng số tài liệu liên quan của câu hỏi) xuất hiện trong top-k kết quả. Với RAG, đây thường là chỉ số truy hồi quan trọng nhất: thứ không lọt vào top-k thì mô hình không bao giờ thấy. Xem [[link:danh-gia/do-luong-retrieval]].</dd>
+<dt id="reindexing">Re-indexing (lập lại chỉ mục)</dt>
+<dd>Tính lại embedding và dựng lại chỉ mục cho toàn bộ kho, bắt buộc khi đổi mô hình embedding hoặc chiến lược chunking. Cần lên kế hoạch để không gián đoạn dịch vụ. Xem [[link:van-hanh/chi-phi-do-tre]].</dd>
+<dt id="reranker">Reranker</dt>
+<dd>Mô hình (thường là cross-encoder) xếp hạng lại một danh sách ứng viên ngắn do bước truy hồi đầu trả về, với độ chính xác cao hơn nhưng chi phí mỗi cặp lớn hơn. Xem [[link:tim-kiem/reranking]].</dd>
+<dt id="retriever">Retriever (bộ truy hồi)</dt>
+<dd>Thành phần nhận truy vấn và trả về danh sách tài liệu/chunk liên quan kèm điểm; có thể là BM25, tìm kiếm vector, hybrid, hoặc tổ hợp với reranker. Xem [[link:nen-tang/kien-truc-tong-quan]].</dd>
+<dt id="rrf">RRF (Reciprocal Rank Fusion)</dt>
+<dd>Phương pháp hợp nhất nhiều danh sách xếp hạng bằng cách cộng 1/(k + hạng) của mỗi tài liệu trong từng danh sách, với k = 60 trong bài báo gốc[[cite:cormack2009]]. Chỉ dùng hạng nên không cần chuẩn hóa điểm của các hệ thống khác nhau. Xem [[link:tim-kiem/hybrid-search]].</dd>
+</dl>
+
+<h2 id="chu-s">S</h2>
+<dl class="glossary">
+<dt id="self-rag">Self-RAG</dt>
+<dd>Hướng tiếp cận huấn luyện mô hình tự quyết định khi nào cần truy hồi và tự đánh giá đoạn truy hồi cũng như câu trả lời của mình bằng các token phản tư đặc biệt. Xem [[link:nang-cao/agentic-graphrag]].</dd>
+<dt id="semantic-cache">Semantic cache</dt>
+<dd>Bộ nhớ đệm trả lại câu trả lời đã có cho câu hỏi mới <em>gần nghĩa</em> với câu cũ (so bằng embedding). Giảm chi phí và độ trễ, nhưng có rủi ro trả câu trả lời cũ cho câu hỏi khác nghĩa tinh tế hoặc cho người dùng khác quyền. Xem [[link:van-hanh/chi-phi-do-tre]].</dd>
+<dt id="semantic-chunking">Semantic chunking</dt>
+<dd>Cắt tài liệu tại các điểm mà nội dung chuyển chủ đề, thường phát hiện bằng độ tương đồng embedding giữa các câu liền kề, thay vì theo số token cố định. Không phải lúc nào cũng tốt hơn cắt theo cấu trúc; cần đo. Xem [[link:du-lieu/chunking]].</dd>
+<dt id="sparse-retrieval">Sparse retrieval</dt>
+<dd>Truy hồi bằng vector thưa có số chiều bằng kích thước từ vựng, hầu hết bằng 0 — mỗi chiều ứng với một từ. BM25 và TF-IDF là dạng cổ điển; SPLADE là dạng học được. Xem [[link:tim-kiem/hybrid-search]].</dd>
+<dt id="splade">SPLADE</dt>
+<dd>Mô hình sparse retrieval học được: dùng mô hình ngôn ngữ để gán trọng số cho từ, kể cả những từ không có trong văn bản (mở rộng ngữ nghĩa), nhưng vẫn lưu được bằng chỉ mục đảo. Xem [[link:tim-kiem/hybrid-search]].</dd>
+<dt id="system-prompt">System prompt</dt>
+<dd>Phần hướng dẫn cố định đặt đầu prompt, quy định vai trò, phạm vi, cách trích dẫn và cách từ chối của mô hình. Không phải ranh giới bảo mật. Xem [[link:sinh/trich-dan-grounding]].</dd>
+</dl>
+
+<h2 id="chu-t">T</h2>
+<dl class="glossary">
+<dt id="tf-idf">TF-IDF</dt>
+<dd>Trọng số từ bằng tần suất trong tài liệu (TF) nhân với độ hiếm trong kho (IDF). Là tiền thân đơn giản hơn của BM25, không có bão hòa tần suất và chuẩn hóa độ dài như BM25. Xem [[link:tim-kiem/hybrid-search]].</dd>
+<dt id="token">Token</dt>
+<dd>Đơn vị văn bản mà mô hình xử lý — có thể là từ, một phần từ hay ký tự. Giới hạn ngữ cảnh, chi phí API và độ trễ đều tính theo token; cùng một câu tiếng Việt có thể tốn số token khác nhau tùy bộ tách token của mô hình. Xem [[link:van-hanh/chi-phi-do-tre]].</dd>
+<dt id="tokenization">Tokenization (tách token / tách từ)</dt>
+<dd>Bước chia văn bản thành token. Với BM25 tiếng Việt, tách theo âm tiết (khoảng trắng) đơn giản nhưng làm mất ranh giới từ ghép; có thể dùng bộ tách từ tiếng Việt[[cite:underthesea]]. Xem [[link:thuc-hanh/rag-dau-tien#tach-tu-tieng-viet|ví dụ trong bài thực hành]].</dd>
+<dt id="top-k">Top-k</dt>
+<dd>Số kết quả xếp đầu được lấy ra ở một bước (truy hồi, rerank, đưa vào prompt). Mỗi bước có thể dùng k khác nhau, ví dụ truy hồi 50, rerank giữ 5. Xem [[link:sinh/xay-dung-context]].</dd>
+</dl>
+
+<h2 id="chu-v">V</h2>
+<dl class="glossary">
+<dt id="vector">Vector</dt>
+<dd>Dãy số cố định độ dài (số chiều), ví dụ 384 hoặc 1024 chiều, biểu diễn một đoạn văn bản trong không gian embedding. Xem [[link:truy-hoi/embedding]].</dd>
+<dt id="vector-database">Vector database</dt>
+<dd>Hệ quản trị dữ liệu chuyên lưu vector và tìm kiếm lân cận (thường bằng ANN), kèm lọc metadata, cập nhật, phân quyền. Chỉ là một cách lưu chỉ mục; RAG không bắt buộc phải có vector database. Xem [[link:truy-hoi/vector-index]].</dd>
+</dl>
+
+<h2 id="chu-z">Z</h2>
+<dl class="glossary">
+<dt id="zero-shot">Zero-shot</dt>
+<dd>Dùng mô hình cho một miền hoặc tác vụ mà nó không được huấn luyện riêng. Trong truy hồi, hiệu năng zero-shot ngoài miền thường thấp hơn trong miền — lý do không nên tin tuyệt đối bảng xếp hạng[[cite:thakur2021]]. Xem [[link:truy-hoi/embedding]].</dd>
+</dl>
+
+<div class="callout nen-tang">
+<p><strong>Thiếu thuật ngữ?</strong> Bảng này ưu tiên những khái niệm xuất hiện trong các bài của sổ tay. Nếu bạn gặp một thuật ngữ chưa có hoặc định nghĩa chưa chính xác, hãy báo qua liên kết “Báo lỗi” ở chân trang. Định nghĩa phụ thuộc phiên bản thư viện được rà soát tính đến 10/2026.</p>
+</div>

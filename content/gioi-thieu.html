@@ -1,0 +1,48 @@
+---
+{
+  "title": "Giới thiệu & phương pháp biên soạn",
+  "description": "Sổ tay RAG dành cho ai, được biên soạn thế nào, phân loại độ tin cậy của thông tin ra sao, và những giới hạn hiện tại.",
+  "lead": "Trang này giải thích sổ tay được làm ra như thế nào, để bạn tự đánh giá mức độ tin cậy của từng phần và biết cách báo lỗi khi gặp sai sót.",
+  "level": "Mọi trình độ",
+  "reviewed": "2026-10-22"
+}
+---
+<h2>Sổ tay này dành cho ai</h2>
+<ul>
+<li><strong>Người mới</strong>, đã biết sơ qua về LLM và muốn hiểu RAG một cách có hệ thống thay vì đọc rời rạc từng bài blog. Hãy bắt đầu từ [[link:lo-trinh]].</li>
+<li><strong>Kỹ sư đang xây hoặc vận hành hệ thống RAG</strong>, cần tra nhanh một chủ đề, so sánh phương án hoặc chẩn đoán lỗi. Có thể dùng thanh tìm kiếm, [[link:tra-cuu/thuat-ngu]] hoặc vào thẳng [[link:danh-gia/chan-doan-loi]].</li>
+<li><strong>Người ra quyết định</strong>, cần hiểu đánh đổi về chất lượng, chi phí và rủi ro trước khi đầu tư.</li>
+</ul>
+
+<h2>Nguyên tắc biên soạn</h2>
+<ol class="steps">
+<li><strong>Tổ chức theo câu hỏi của người đọc.</strong> Mỗi bài mở bằng vấn đề cần giải quyết, sau đó mới đến cơ chế, ví dụ, đánh đổi, lỗi thường gặp, cách kiểm chứng và nguồn đọc thêm.</li>
+<li><strong>Phân biệt loại thông tin.</strong> Bốn loại khung màu tách bạch kiến thức nền tảng, kết quả nghiên cứu (luôn kèm điều kiện thí nghiệm), kinh nghiệm triển khai (cần đo lại trên dữ liệu của bạn) và nhận định riêng của người biên soạn.</li>
+<li><strong>Ưu tiên nguồn gốc.</strong> Thứ tự ưu tiên: bài báo khoa học và benchmark công khai, tài liệu chính thức và mã nguồn, rồi đến blog kỹ thuật của tổ chức có công bố phương pháp. Mỗi nguồn trong [[link:tra-cuu/nguon-tham-khao]] có ghi chú ngắn về đóng góp của nó.</li>
+<li><strong>Không suy rộng benchmark.</strong> Con số từ một bài báo chỉ đúng với bộ dữ liệu, mô hình và thời điểm của bài báo đó. Sổ tay ghi rõ điều kiện kèm theo và tránh biến một kết quả cụ thể thành quy luật chung.</li>
+<li><strong>Diễn giải bằng ví dụ riêng.</strong> Các ví dụ dùng bối cảnh tiếng Việt (chính sách đổi trả, sổ tay nhân sự, văn bản pháp luật…) và được viết mới, không sao chép nguồn.</li>
+<li><strong>Ghi ngày rà soát.</strong> Mỗi bài có ngày rà soát. Nội dung phụ thuộc phiên bản phần mềm hoặc bảng xếp hạng được ghi “tính đến” thời điểm cụ thể.</li>
+</ol>
+
+<h2>Sổ tay được làm ra như thế nào</h2>
+<p>Nội dung được biên soạn với sự hỗ trợ của trợ lý AI (Claude, do Anthropic phát triển). Quy trình: lập kiến trúc nội dung, nghiên cứu nguồn, viết bản nháp, đối chiếu từng nguồn được trích dẫn với trang gốc (arXiv, trang tài liệu chính thức), rồi rà soát chéo. Mọi trích dẫn đều trỏ tới nguồn công khai để bạn tự kiểm tra.</p>
+<div class="callout canh-bao">
+<p>Dù đã đối chiếu nguồn, sổ tay vẫn có thể còn sai sót: diễn giải chưa chính xác, nguồn đã có phiên bản mới, hoặc thông tin đã lỗi thời. Với quyết định quan trọng (pháp lý, bảo mật, chi phí lớn), hãy đọc nguồn gốc và tự thử nghiệm trên dữ liệu của bạn. Các nhận định về pháp luật trong sổ tay chỉ để tham khảo, không phải tư vấn pháp lý.</p>
+</div>
+
+<h2>Phạm vi và giới hạn hiện tại</h2>
+<ul>
+<li>Phiên bản đầu (10/2026) có 22 bài trong 9 phần, bao quát pipeline RAG dạng văn bản. RAG đa phương thức (ảnh, bảng phức tạp, video) mới được nhắc ngắn trong [[link:nang-cao/agentic-graphrag]].</li>
+<li>Sổ tay không xếp hạng nhà cung cấp hay sản phẩm thương mại, và không đăng bảng giá vì giá thay đổi liên tục. Công cụ ước tính chi phí yêu cầu bạn tự nhập đơn giá hiện hành.</li>
+<li>Ví dụ mã trong [[link:thuc-hanh/rag-dau-tien]] dùng để học, chưa phải mã cho môi trường sản xuất.</li>
+<li>Nghiên cứu về RAG thay đổi rất nhanh. Các kết quả thực nghiệm được trích dẫn có thể đã bị vượt qua bởi công trình mới hơn.</li>
+</ul>
+
+<h2>Quyền riêng tư</h2>
+<p>Website là trang tĩnh: không dùng cookie theo dõi, không có công cụ phân tích hành vi, không tải font hay script từ bên thứ ba. Lựa chọn giao diện sáng/tối được lưu trong trình duyệt của bạn (localStorage) và không gửi đi đâu. Các công cụ tương tác chạy hoàn toàn trên máy bạn.</p>
+
+<h2>Báo lỗi và đóng góp</h2>
+<p>Nếu bạn phát hiện thông tin sai, nguồn hỏng hoặc có đề xuất chủ đề, hãy mở issue trên <a href="https://github.com/mekongaidnhk-blip/so-tay-rag/issues" rel="noopener">GitHub</a>. Khi báo lỗi, xin kèm bằng chứng (nguồn, phiên bản phần mềm, ví dụ tái hiện) để việc sửa dựa trên dữ liệu chứ không dựa trên ý kiến. Mã nguồn website và hướng dẫn biên soạn (<code>CONTRIBUTING.md</code>) có trong cùng kho mã.</p>
+
+<h2>Giấy phép</h2>
+<p>Nội dung văn bản phát hành theo giấy phép <a href="https://creativecommons.org/licenses/by/4.0/deed.vi" rel="noopener">Creative Commons Ghi công 4.0 Quốc tế (CC BY 4.0)</a>: bạn được chia sẻ và chỉnh sửa, kể cả cho mục đích thương mại, miễn là ghi công nguồn. Tài liệu được trích dẫn thuộc bản quyền của tác giả gốc. Sổ tay chỉ tóm lược và dẫn liên kết, không sao chép lại nội dung của họ.</p>

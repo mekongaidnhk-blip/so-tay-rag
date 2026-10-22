@@ -1,0 +1,84 @@
+---
+{
+  "title": "Lộ trình học RAG",
+  "description": "Lộ trình 6 chặng từ hiểu khái niệm tới vận hành RAG trong sản xuất, kèm lối tắt theo vai trò: kỹ sư, quản lý sản phẩm, người làm nghiên cứu.",
+  "lead": "Không cần đọc hết mọi bài theo thứ tự. Lộ trình này chia sổ tay thành sáu chặng. Mỗi chặng kết thúc bằng một việc cụ thể bạn làm được, để bạn biết mình đã sẵn sàng sang chặng sau hay chưa.",
+  "level": "Mọi trình độ",
+  "reviewed": "2026-10-22",
+  "crumbs": true
+}
+---
+<div class="callout tom-tat">
+<p>Nguyên tắc của lộ trình: <strong>hiểu đủ để dựng → dựng sớm → đo → cải tiến chỗ số đo chỉ ra</strong>. Các kỹ thuật nâng cao để ở cuối có chủ ý. Chúng chỉ đáng thêm vào khi bạn đã có bộ kiểm thử chứng minh pipeline cơ bản là chưa đủ.</p>
+</div>
+
+<h2>Chặng 1 — Hiểu bài toán <span class="badge">~1 giờ</span></h2>
+<p>Mục tiêu: giải thích được cho đồng nghiệp RAG là gì, vì sao cần, và khi nào nên chọn cách khác.</p>
+<ol class="steps">
+<li>[[link:nen-tang/rag-la-gi]]</li>
+<li>[[link:nen-tang/khi-nao-dung-rag]]</li>
+<li>[[link:nen-tang/kien-truc-tong-quan]]</li>
+</ol>
+<div class="callout kiem-chung"><p><strong>Bạn đã xong chặng này khi</strong> vẽ lại được sơ đồ hai pha (lập chỉ mục và truy vấn), và nói được một bài toán cụ thể nên dùng RAG cùng một bài toán không nên dùng.</p></div>
+
+<h2>Chặng 2 — Dựng phiên bản đầu tiên <span class="badge">~2–3 giờ</span></h2>
+<p>Mục tiêu: có một pipeline chạy được trên dữ liệu thật của bạn, dù còn thô.</p>
+<ol class="steps">
+<li>[[link:thuc-hanh/rag-dau-tien]]: làm theo từng bước, rồi thay bằng tài liệu của bạn.</li>
+<li>[[link:du-lieu/thu-thap-lam-sach]]: kiểm tra văn bản trích xuất có sạch không trước khi đi tiếp.</li>
+<li>[[link:du-lieu/chunking]]: thử công cụ cắt chunk tương tác để có trực giác về kích thước và overlap.</li>
+<li>[[link:truy-hoi/embedding]]: hiểu vector, cosine và cách chọn mô hình.</li>
+</ol>
+<div class="callout kiem-chung"><p><strong>Bạn đã xong chặng này khi</strong> hệ thống trả lời được ít nhất vài câu hỏi trên tài liệu của bạn, và bạn xem được các chunk mà nó đã truy hồi cho mỗi câu.</p></div>
+
+<h2>Chặng 3 — Đo lường <span class="badge">~2 giờ</span></h2>
+<p>Mục tiêu: thay cảm giác “có vẻ ổn” bằng con số. Đây là chặng hay bị bỏ qua nhất, nhưng lại quan trọng nhất.</p>
+<ol class="steps">
+<li>[[link:danh-gia/do-luong-retrieval]]: xây bộ 30–50 câu hỏi có nhãn, tính Recall@k và MRR.</li>
+<li>[[link:danh-gia/danh-gia-generation]]: đo độ trung thực và độ đúng của câu trả lời.</li>
+<li>[[link:danh-gia/chan-doan-loi]]: phân loại lỗi theo tầng để biết cần sửa ở đâu.</li>
+</ol>
+<div class="callout kiem-chung"><p><strong>Bạn đã xong chặng này khi</strong> có một lệnh chạy lại toàn bộ bộ đánh giá và in ra bảng chỉ số, đồng thời biết loại lỗi nào chiếm nhiều nhất.</p></div>
+
+<h2>Chặng 4 — Cải thiện chất lượng <span class="badge">~3–4 giờ</span></h2>
+<p>Mục tiêu: sửa đúng điểm nghẽn mà chặng 3 đã chỉ ra. Mỗi kỹ thuật dưới đây giải một loại lỗi khác nhau.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Nếu số đo cho thấy…</th><th>Đọc</th></tr></thead>
+<tbody>
+<tr><td>Tài liệu đúng không lọt vào top-k, nhất là với mã số, tên riêng</td><td>[[link:tim-kiem/hybrid-search]]</td></tr>
+<tr><td>Tài liệu đúng có trong top-50 nhưng không ở top-5</td><td>[[link:tim-kiem/reranking]]</td></tr>
+<tr><td>Câu hỏi mơ hồ, nhiều bước, hoặc là câu hỏi nối tiếp trong hội thoại</td><td>[[link:tim-kiem/xu-ly-truy-van]]</td></tr>
+<tr><td>Chunk truy hồi được nhưng thiếu ngữ cảnh (không rõ thuộc tài liệu, mục nào)</td><td>[[link:du-lieu/metadata-va-bieu-dien]]</td></tr>
+<tr><td>Tài liệu đúng đã nằm trong prompt nhưng mô hình vẫn trả lời sai</td><td>[[link:sinh/xay-dung-context]]</td></tr>
+<tr><td>Câu trả lời đúng nhưng trích dẫn sai hoặc thiếu</td><td>[[link:sinh/trich-dan-grounding]]</td></tr>
+<tr><td>Tìm kiếm chậm khi dữ liệu lớn</td><td>[[link:truy-hoi/vector-index]]</td></tr>
+</tbody></table></div>
+
+<h2>Chặng 5 — Đưa vào sử dụng thật <span class="badge">~2 giờ</span></h2>
+<ol class="steps">
+<li>[[link:van-hanh/bao-mat]]: phân quyền tài liệu, prompt injection, dữ liệu cá nhân.</li>
+<li>[[link:van-hanh/chi-phi-do-tre]]: ngân sách độ trễ, chi phí theo truy vấn, giám sát.</li>
+<li>[[link:thuc-hanh/checklist-trien-khai]]: rà soát trước khi phát hành.</li>
+</ol>
+
+<h2>Chặng 6 — Mở rộng <span class="badge">tùy nhu cầu</span></h2>
+<ol class="steps">
+<li>[[link:nang-cao/agentic-graphrag]]: khi pipeline một lượt không đủ cho câu hỏi nhiều bước hoặc câu hỏi tổng hợp toàn kho.</li>
+<li>[[link:nang-cao/tinh-huong-ung-dung]]: những khác biệt khi áp dụng cho hỗ trợ khách hàng, văn bản pháp luật, tài liệu kỹ thuật…</li>
+</ol>
+
+<h2>Lối tắt theo vai trò</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Vai trò</th><th>Nên đọc</th><th>Có thể lướt</th></tr></thead>
+<tbody>
+<tr><td><strong>Kỹ sư triển khai</strong></td><td>Toàn bộ chặng 2–5, đặc biệt [[link:thuc-hanh/rag-dau-tien]], [[link:danh-gia/chan-doan-loi]], [[link:van-hanh/bao-mat]]</td><td>Phần lịch sử trong chặng 1</td></tr>
+<tr><td><strong>Quản lý sản phẩm / người ra quyết định</strong></td><td>[[link:nen-tang/khi-nao-dung-rag]], [[link:nen-tang/kien-truc-tong-quan]], [[link:danh-gia/danh-gia-generation]], [[link:van-hanh/chi-phi-do-tre]], [[link:nang-cao/tinh-huong-ung-dung]], [[link:thuc-hanh/checklist-trien-khai]]</td><td>Chi tiết thuật toán chỉ mục, code</td></tr>
+<tr><td><strong>Người làm nghiên cứu / học thuật</strong></td><td>Các khung “Kết quả nghiên cứu” trong mọi bài, [[link:tra-cuu/nguon-tham-khao]], [[link:nang-cao/agentic-graphrag]], [[link:danh-gia/do-luong-retrieval]]</td><td>Checklist vận hành</td></tr>
+<tr><td><strong>Đã có hệ thống RAG, cần sửa lỗi</strong></td><td>Bắt đầu từ [[link:danh-gia/chan-doan-loi]], rồi theo bảng ở chặng 4</td><td>Chặng 1–2</td></tr>
+</tbody></table></div>
+
+<h2>Đọc tiếp</h2>
+<ul>
+<li>Bắt đầu chặng 1: [[link:nen-tang/rag-la-gi]]</li>
+<li>Gặp thuật ngữ lạ? Xem [[link:tra-cuu/thuat-ngu]].</li>
+</ul>

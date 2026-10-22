@@ -1,0 +1,236 @@
+---
+{
+  "title": "Embedding: biến văn bản thành vector như thế nào và chọn mô hình ra sao?",
+  "navTitle": "Embedding",
+  "description": "Embedding biểu diễn “ý nghĩa” bằng vector ra sao, cosine/dot/L2 khác nhau thế nào, bi-encoder được huấn luyện bằng contrastive learning, cân nhắc tiếng Việt, số chiều, Matryoshka, lượng tử hóa và cách chọn mô hình mà không phụ thuộc bảng xếp hạng.",
+  "lead": "Người dùng hỏi “ngày nghỉ có lương”, tài liệu lại viết “phép năm” — tìm theo từ khóa sẽ trượt. Embedding giải quyết khoảng cách từ vựng này bằng cách đặt các đoạn văn có nghĩa gần nhau vào những điểm gần nhau trong một không gian vector. Bài này giải thích cơ chế đó, giới hạn của nó và cách chọn mô hình cho dữ liệu của bạn.",
+  "level": "Trung cấp",
+  "reviewed": "2026-10-22",
+  "kinds": ["nen-tang", "nghien-cuu", "kinh-nghiem", "nhan-dinh"]
+}
+---
+<div class="callout tom-tat">
+<ul>
+<li><strong>Embedding</strong> (vector nhúng) là một dãy vài trăm tới vài nghìn số thực đại diện cho một đoạn văn. Mô hình được huấn luyện sao cho câu hỏi và đoạn văn trả lời nó có vector <em>gần nhau</em>.</li>
+<li>Độ gần thường đo bằng <strong>cosine</strong>, <strong>tích vô hướng</strong> (dot product) hoặc <strong>khoảng cách L2</strong>. Khi vector đã chuẩn hóa về độ dài 1, cả ba cho cùng một thứ tự xếp hạng.</li>
+<li>Mô hình embedding cho truy hồi là <strong>bi-encoder</strong> huấn luyện bằng <strong>contrastive learning</strong>: kéo cặp (câu hỏi, đoạn đúng) lại gần, đẩy các đoạn sai ra xa. Nhiều mô hình yêu cầu tiền tố riêng cho truy vấn và tài liệu — quên tiền tố là lỗi phổ biến.</li>
+<li>Với tiếng Việt: kiểm tra mô hình có hỗ trợ tiếng Việt, có yêu cầu tách từ không, và giới hạn độ dài đầu vào. Số chiều, Matryoshka và lượng tử hóa là đòn bẩy bộ nhớ, đổi lại một phần chất lượng.</li>
+<li>Bảng xếp hạng như MTEB chỉ để <em>sàng lọc</em>. Quyết định cuối cùng phải dựa trên bộ câu hỏi thật của bạn. Đổi mô hình đồng nghĩa với <strong>lập chỉ mục lại toàn bộ</strong>.</li>
+</ul>
+</div>
+
+<h2>Vấn đề: tìm theo nghĩa, không chỉ theo chữ</h2>
+<p>Quay lại ví dụ ở [[link:nen-tang/rag-la-gi]]: sổ tay nhân sự viết “Mục 4.2 — Nghỉ phép năm”, còn nhân viên hỏi “thử việc có được nghỉ có lương không?”. Hai câu gần như không chung từ quan trọng nào. Tìm kiếm từ khóa thuần túy như BM25 (xem [[link:tim-kiem/hybrid-search]]) chấm điểm dựa trên từ trùng nhau, nên có thể bỏ sót đoạn đúng. Đây gọi là <strong>vocabulary mismatch</strong> (lệch từ vựng): cùng một ý nhưng diễn đạt bằng từ khác.</p>
+<p>Ý tưởng của dense retrieval (truy hồi dày đặc) là học một hàm <em>f</em> biến mọi đoạn văn thành vector, sao cho “có cùng ý” tương ứng với “gần nhau về mặt hình học”. Khi đó tìm tài liệu liên quan trở thành bài toán hình học: tìm các vector gần vector câu hỏi nhất. Bài toán tìm nhanh trong hàng triệu vector được bàn ở [[link:truy-hoi/vector-index]]; bài này tập trung vào chính các vector.</p>
+
+<h2>Embedding là gì: từ trực giác tới toán</h2>
+<p>Hãy tưởng tượng mỗi đoạn văn được đặt vào một bản đồ. Các đoạn về “đổi trả hàng” nằm một vùng, các đoạn về “lãi suất tiết kiệm” nằm vùng khác, và trong vùng “đổi trả” thì “hoàn tiền COD” nằm gần “hoàn tiền chuyển khoản” hơn là gần “đổi size giày”. Bản đồ thật không có 2 chiều mà có vài trăm tới vài nghìn chiều — ví dụ multilingual-e5-large và BGE-M3 đều sinh vector 1024 chiều[[cite:e5card,bgem3card]] — và các chiều không có nghĩa riêng mà con người đọc được. Chỉ <em>vị trí tương đối</em> giữa các điểm là có ý nghĩa.</p>
+
+<div class="callout nen-tang">
+<p><strong>Ba cách đo độ gần.</strong> Với hai vector <em>a</em>, <em>b</em> có <em>d</em> chiều:</p>
+<ul>
+<li><strong>Tích vô hướng</strong> (dot product): a·b = Σ a<sub>i</sub>b<sub>i</sub>. Càng lớn càng gần. Phụ thuộc cả hướng lẫn độ dài vector.</li>
+<li><strong>Cosine similarity</strong>: cos(a, b) = a·b / (‖a‖·‖b‖), nằm trong [−1, 1]. Chỉ phụ thuộc <em>góc</em> giữa hai vector, bỏ qua độ dài.</li>
+<li><strong>Khoảng cách Euclid (L2)</strong>: ‖a − b‖. Càng nhỏ càng gần.</li>
+</ul>
+<p>Nếu đã <strong>chuẩn hóa</strong> mọi vector về độ dài 1 (chia cho ‖a‖), thì a·b = cos(a, b) và ‖a − b‖² = 2 − 2·cos(a, b). Nghĩa là ba thước đo cho <em>cùng một thứ tự</em> xếp hạng; chọn cái nào chỉ còn là chuyện tốc độ và công cụ hỗ trợ.</p>
+</div>
+
+<h3>Một ví dụ bằng số</h3>
+<p>Lấy vector câu hỏi q = (0,6; 0,8) — đã có độ dài 1 — và ba tài liệu trong không gian 2 chiều:</p>
+<table>
+<thead><tr><th>Tài liệu</th><th>Vector</th><th>Dot q·d</th><th>Cosine</th><th>Nhận xét</th></tr></thead>
+<tbody>
+<tr><td>D1</td><td>(0,8; 0,6)</td><td>0,96</td><td>0,96</td><td>Gần cùng hướng, độ dài 1</td></tr>
+<tr><td>D2</td><td>(−0,6; 0,8)</td><td>0,28</td><td>0,28</td><td>Lệch góc lớn</td></tr>
+<tr><td>D3</td><td>(3; 4)</td><td>5,00</td><td>1,00</td><td>Cùng hướng tuyệt đối, nhưng dài gấp 5</td></tr>
+</tbody></table>
+<p>Theo cosine, D3 và q “cùng ý” hoàn toàn (1,00). Theo dot product, D3 thắng áp đảo chỉ vì vector dài. Nếu mô hình của bạn không chuẩn hóa đầu ra mà bạn lại dùng dot product, các đoạn có vector dài bất thường (đôi khi là đoạn dài, hoặc đoạn có nội dung lặp) có thể lấn át. Quy tắc an toàn: <em>dùng đúng thước đo mà mô hình được huấn luyện</em> (ghi trong model card), và nếu không chắc thì chuẩn hóa rồi dùng cosine.</p>
+
+<h3>Thử trực tiếp: cosine và tích vô hướng</h3>
+<div class="widget" data-widget="cosine"><p>Bật JavaScript để dùng công cụ tương tác.</p></div>
+<p>Công cụ trên mô phỏng hai vector trong mặt phẳng. Kéo thanh “góc” để thấy cosine giảm dần từ 1 (cùng hướng) qua 0 (vuông góc) tới −1 (ngược hướng). Sau đó giữ nguyên góc và kéo thanh “độ dài B”: cosine không đổi, nhưng tích vô hướng thay đổi theo độ dài. Đây chính là lý do chuẩn hóa vector quan trọng. Lưu ý thực tế: với embedding văn bản thật, cosine giữa hai đoạn <em>không liên quan</em> hiếm khi xuống gần 0 hay âm như trong mô phỏng. Ví dụ, model card của multilingual-e5 giải thích rằng điểm cosine của mô hình này phân bố quanh khoảng 0,7–1,0 do dùng nhiệt độ thấp (0,01) khi huấn luyện, và điều quan trọng là <em>thứ tự tương đối</em> của điểm chứ không phải giá trị tuyệt đối[[cite:e5card]]. Vì vậy cosine không phải xác suất liên quan, và mọi ngưỡng (threshold) phải hiệu chỉnh riêng cho từng mô hình.</p>
+
+<h2>Mô hình học embedding như thế nào</h2>
+<h3>Bi-encoder: mã hóa riêng, so sánh sau</h3>
+<p>Có hai cách dùng một mô hình Transformer để chấm mức liên quan giữa câu hỏi và đoạn văn. <strong>Cross-encoder</strong> đưa <em>cả hai</em> vào mô hình cùng lúc và xuất một điểm — chính xác nhưng phải chạy lại cho mỗi cặp. <strong>Bi-encoder</strong> (hai tháp) mã hóa câu hỏi và đoạn văn <em>độc lập</em> thành hai vector rồi so sánh bằng cosine. Vì vector tài liệu không phụ thuộc câu hỏi, ta tính sẵn cho cả kho một lần khi lập chỉ mục; lúc truy vấn chỉ cần mã hóa câu hỏi và tìm lân cận.</p>
+
+<div class="callout nghien-cuu">
+<p><strong>Vì sao không dùng cross-encoder cho toàn kho?</strong> Reimers và Gurevych (2019) ước tính: tìm cặp câu giống nhau nhất trong 10.000 câu bằng BERT dạng cross-encoder cần khoảng 50 triệu lượt suy luận, tức khoảng 65 giờ; Sentence-BERT — biến BERT thành bi-encoder sinh embedding so sánh bằng cosine — rút xuống khoảng 5 giây trong khi giữ độ chính xác tương đương trên các tác vụ đo độ tương đồng câu mà tác giả thử nghiệm[[cite:reimers2019]]. Con số phụ thuộc phần cứng năm 2019, nhưng tỷ lệ chênh lệch cho thấy bản chất: cross-encoder tỷ lệ với số cặp, bi-encoder tỷ lệ với số văn bản. Cross-encoder vẫn rất hữu ích ở bước xếp hạng lại một danh sách ngắn — xem [[link:tim-kiem/reranking]].</p>
+</div>
+
+<h3>Contrastive learning: kéo lại gần, đẩy ra xa</h3>
+<figure class="diagram">
+<svg viewBox="0 0 720 300" width="720" role="img" aria-labelledby="emb1t emb1d">
+<title id="emb1t">Minh họa contrastive learning với in-batch negatives</title>
+<desc id="emb1d">Bên trái: một batch gồm ba cặp câu hỏi và đoạn văn đúng. Bên phải: trong không gian vector, câu hỏi q1 được kéo lại gần đoạn đúng p1 và đẩy ra xa các đoạn p2, p3 vốn là đáp án của câu hỏi khác trong cùng batch.</desc>
+<defs><marker id="embah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="arrowhead"/></marker></defs>
+<text x="20" y="26" font-size="13" font-weight="700" class="muted">MỘT BATCH HUẤN LUYỆN</text>
+<rect x="20" y="40" width="300" height="50" rx="8" class="box-b"/><text x="34" y="62" font-size="13">q1: “thử việc có nghỉ phép năm không?”</text><text x="34" y="80" font-size="11.5" class="muted">p1: “Mục 4.2 — Nghỉ phép năm áp dụng cho…”</text>
+<rect x="20" y="100" width="300" height="50" rx="8" class="box"/><text x="34" y="122" font-size="13">q2: “hoàn tiền COD mất bao lâu?”</text><text x="34" y="140" font-size="11.5" class="muted">p2: “Với COD, tiền được chuyển khoản trong…”</text>
+<rect x="20" y="160" width="300" height="50" rx="8" class="box"/><text x="34" y="182" font-size="13">q3: “phí thường niên thẻ Gold?”</text><text x="34" y="200" font-size="11.5" class="muted">p3: “Thẻ Gold: phí thường niên năm đầu…”</text>
+<text x="20" y="240" font-size="12" class="muted">Với q1: p1 là positive; p2, p3 đóng vai negative</text>
+<text x="20" y="258" font-size="12" class="muted">“miễn phí” (in-batch negatives).</text>
+<text x="420" y="26" font-size="13" font-weight="700" class="muted">KHÔNG GIAN VECTOR</text>
+<rect x="400" y="40" width="300" height="230" rx="10" class="box-v"/>
+<circle cx="500" cy="150" r="9" class="box-a"/><text x="500" y="178" font-size="13" text-anchor="middle" font-weight="700">q1</text>
+<circle cx="560" cy="120" r="9" class="box-b"/><text x="578" y="116" font-size="13">p1</text>
+<circle cx="440" cy="80" r="9" class="box"/><text x="440" y="66" font-size="13" text-anchor="middle">p2</text>
+<circle cx="640" cy="230" r="9" class="box"/><text x="660" y="234" font-size="13">p3</text>
+<path d="M512 144 L546 127" class="ln-a" marker-end="url(#embah)"/>
+<path d="M492 140 L452 92" class="ln-d" marker-end="url(#embah)"/>
+<path d="M512 160 L626 222" class="ln-d" marker-end="url(#embah)"/>
+<text x="560" y="150" font-size="11.5" class="muted">kéo lại</text>
+<text x="410" y="125" font-size="11.5" class="muted">đẩy ra</text>
+</svg>
+<figcaption>Contrastive learning: mỗi câu hỏi được kéo về phía đoạn đúng của nó và đẩy khỏi đoạn đúng của các câu hỏi khác trong cùng batch.</figcaption>
+</figure>
+<p>Huấn luyện bi-encoder cho truy hồi cần dữ liệu dạng cặp (câu hỏi, đoạn liên quan). Hàm mất mát phổ biến là dạng InfoNCE / softmax trên điểm tương đồng:</p>
+<pre><code>L(q) = −log  exp(s(q, p⁺) / τ)  /  Σⱼ exp(s(q, pⱼ) / τ)
+
+s(q, p) : cosine hoặc dot product giữa hai vector
+p⁺      : đoạn đúng của q
+pⱼ      : p⁺ cùng các đoạn sai (negatives)
+τ       : nhiệt độ (temperature), điều chỉnh độ "gắt" của softmax</code></pre>
+<p>Hàm này chỉ thấp khi điểm của đoạn đúng vượt trội so với mọi đoạn sai. DPR — một trong các bộ truy hồi dense đầu tiên vượt BM25 trên QA miền mở — dùng đúng thủ thuật <strong>in-batch negatives</strong>: đoạn đúng của các câu hỏi khác trong batch được tái sử dụng làm negative, cộng thêm <em>hard negatives</em> lấy từ BM25 (đoạn trùng từ khóa nhưng không trả lời câu hỏi)[[cite:karpukhin2020]]. Batch càng lớn, càng nhiều negative, mô hình càng học được ranh giới tinh. Các họ mô hình sau này như E5 mở rộng công thức này lên quy mô lớn: tiền huấn luyện tương phản trên lượng lớn cặp văn bản thu thập từ web rồi fine-tune trên dữ liệu có nhãn[[cite:wang2022e5]]; bản đa ngôn ngữ dùng khoảng 1 tỷ cặp văn bản đa ngôn ngữ[[cite:wang2024me5]].</p>
+<p>Hệ quả thực tế quan trọng: <strong>mô hình học “liên quan” theo nghĩa của dữ liệu huấn luyện</strong>. Nếu dữ liệu chủ yếu là câu hỏi web và đoạn Wikipedia, khái niệm “gần nhau” của mô hình phản ánh điều đó — không nhất thiết khớp với “liên quan” trong hợp đồng bảo hiểm hay văn bản pháp luật của bạn.</p>
+
+<h3>Truy vấn và tài liệu không đối xứng: tiền tố và chỉ dẫn</h3>
+<p>Câu hỏi thường ngắn (“phí thường niên thẻ Gold?”), còn đoạn văn dài và mang tính trần thuật. Đây là bài toán <strong>bất đối xứng</strong> (asymmetric). Nhiều mô hình xử lý bằng cách cho biết loại văn bản qua tiền tố. Model card của multilingual-e5-large yêu cầu thêm <code>"query: "</code> trước truy vấn và <code>"passage: "</code> trước tài liệu cho truy hồi, kể cả với văn bản không phải tiếng Anh, và cảnh báo hiệu năng sẽ giảm nếu bỏ tiền tố; với tác vụ đối xứng như đo độ tương đồng câu thì dùng <code>"query: "</code> cho cả hai[[cite:e5card]]. Ngược lại, model card BGE-M3 nói rõ mô hình này không cần thêm chỉ dẫn vào truy vấn[[cite:bgem3card]]. Không có quy ước chung — mỗi mô hình một kiểu.</p>
+<pre><code># Minh họa với sentence-transformers (API có thể thay đổi; kiểm tra phiên bản bạn dùng)
+from sentence_transformers import SentenceTransformer
+
+model = SentenceTransformer("intfloat/multilingual-e5-large")
+cau_hoi = ["query: nhân viên thử việc có được nghỉ phép năm không"]
+doan    = ["passage: Mục 4.2 — Nghỉ phép năm áp dụng cho nhân viên đã ký hợp đồng chính thức...",
+           "passage: Mục 2.1 — Thời gian thử việc tối đa 60 ngày..."]
+
+q = model.encode(cau_hoi, normalize_embeddings=True)   # chuẩn hóa về độ dài 1
+d = model.encode(doan,    normalize_embeddings=True)
+print(q @ d.T)   # dot product = cosine vì đã chuẩn hóa</code></pre>
+
+<div class="callout canh-bao">
+<p><strong>Lỗi âm thầm thường gặp:</strong> lập chỉ mục với tiền tố <code>passage:</code> nhưng quên <code>query:</code> ở phía truy vấn (hoặc ngược lại, hoặc dùng hai tiền tố khác nhau ở hai service). Hệ thống vẫn chạy, kết quả vẫn “có vẻ hợp lý”, chỉ là kém hơn. Cách phòng: đóng gói hàm <code>embed_query()</code> và <code>embed_document()</code> dùng chung một thư viện, ghi tên mô hình + tiền tố vào metadata chỉ mục, và có test kiểm tra.</p>
+</div>
+
+<h2>Tiếng Việt và mô hình đa ngôn ngữ</h2>
+<p>Với dữ liệu tiếng Việt, có ba nhóm lựa chọn chính:</p>
+<ol>
+<li><strong>Mô hình đa ngôn ngữ</strong> như multilingual-E5 hay BGE-M3. BGE-M3 được thiết kế cho hơn 100 ngôn ngữ, nhận đầu vào tới 8.192 token và cùng lúc sinh ba loại biểu diễn: dense, sparse (trọng số từ vựng) và multi-vector[[cite:chen2024m3]]. multilingual-E5 dựa trên XLM-RoBERTa, cắt văn bản ở 512 token, và model card lưu ý ngôn ngữ ít tài nguyên có thể kém hơn[[cite:e5card]]. Ưu điểm: một mô hình cho tài liệu lẫn tiếng Việt và tiếng Anh, hỗ trợ truy vấn tiếng Việt tìm tài liệu tiếng Anh (cross-lingual).</li>
+<li><strong>Mô hình chuyên tiếng Việt.</strong> Ví dụ <code>bkai-foundation-models/vietnamese-bi-encoder</code> dựng trên PhoBERT-base-v2, sinh vector 768 chiều, tối đa 256 token, huấn luyện trên MS MARCO và SQuAD v2 dịch máy sang tiếng Việt cùng một phần dữ liệu truy hồi văn bản pháp luật từ cuộc thi Zalo 2021[[cite:bkaicard]]. Điểm cần chú ý: model card yêu cầu <em>đầu vào đã tách từ</em> (ví dụ “vui_tính”) bằng các công cụ như pyvi hoặc underthesea[[cite:bkaicard,pyvi,underthesea]]. Đưa văn bản thô vào mô hình loại này là một lỗi khó phát hiện.</li>
+<li><strong>Mô hình qua API thương mại</strong>: tiện, nhưng cần cân nhắc dữ liệu rời khỏi hạ tầng của bạn, chi phí theo token và rủi ro nhà cung cấp ngừng phiên bản mô hình (buộc lập chỉ mục lại).</li>
+</ol>
+
+<div class="callout nghien-cuu">
+<p><strong>Benchmark tiếng Việt đang hình thành.</strong> VN-MTEB (2025) gồm 41 bộ dữ liệu thuộc 6 loại tác vụ (truy hồi, phân loại, phân loại cặp, phân cụm, rerank, STS), được xây chủ yếu bằng cách <em>dịch tự động</em> dữ liệu MTEB tiếng Anh rồi lọc bằng LLM và mô hình embedding; trên 18 mô hình được thử, nhóm tác giả nhận thấy các mô hình lớn hơn dùng Rotary Positional Embedding nhìn chung tốt hơn mô hình dùng Absolute Positional Embedding[[cite:pham2025vnmteb]]. Một nhóm khác đề xuất benchmark truy hồi và rerank tiếng Việt cùng một biến thể của hàm mất mát InfoNCE[[cite:nguyen2025viir]]. Cả hai là điểm tham khảo hữu ích, nhưng dữ liệu dịch máy khó phản ánh đặc thù văn bản hành chính, pháp lý hay hội thoại khách hàng tiếng Việt thực tế.</p>
+</div>
+
+<div class="callout kinh-nghiem">
+<p><strong>Những điểm cần kiểm tra khi làm với tiếng Việt</strong> (thực hành phổ biến, không phải quy luật):</p>
+<ul>
+<li><strong>Chuẩn hóa Unicode</strong> (NFC) cho cả tài liệu và truy vấn. Cùng chữ “hoà/hòa” có thể được mã hóa khác nhau (dựng sẵn hay tổ hợp dấu), khiến tokenizer tách khác nhau.</li>
+<li><strong>Đếm token thật</strong>: tokenizer đa ngôn ngữ thường cắt tiếng Việt thành nhiều token hơn so với cùng lượng nội dung tiếng Anh. Một chunk “500 từ” có thể vượt giới hạn 512 token và bị cắt cụt phần cuối mà không báo lỗi. Xem [[link:du-lieu/chunking]].</li>
+<li><strong>Truy vấn không dấu</strong> (“chinh sach doi tra”): thử trực tiếp với mô hình của bạn; đừng giả định mô hình xử lý tốt. Xem [[link:tim-kiem/xu-ly-truy-van]].</li>
+<li><strong>Tài liệu trộn ngôn ngữ</strong> (tiếng Việt xen thuật ngữ tiếng Anh, mã sản phẩm): embedding thường yếu với mã và số — đây là chỗ cần tìm kiếm từ khóa bổ trợ.</li>
+</ul>
+</div>
+
+<h2>Số chiều, Matryoshka và lượng tử hóa: đòn bẩy bộ nhớ</h2>
+<p>Bộ nhớ của chỉ mục vector tỷ lệ thuận với số vector × số chiều × số byte mỗi chiều. Với 1 triệu chunk:</p>
+<table>
+<thead><tr><th>Cấu hình</th><th>Byte / vector</th><th>1 triệu vector</th><th>Ghi chú</th></tr></thead>
+<tbody>
+<tr><td>1024 chiều, float32</td><td>4.096</td><td>≈ 4,1 GB</td><td>Mặc định của nhiều mô hình</td></tr>
+<tr><td>768 chiều, float32</td><td>3.072</td><td>≈ 3,1 GB</td><td>Cỡ mô hình “base”</td></tr>
+<tr><td>1024 → 256 chiều (Matryoshka), float32</td><td>1.024</td><td>≈ 1,0 GB</td><td>Chỉ hợp lệ với mô hình huấn luyện kiểu Matryoshka</td></tr>
+<tr><td>1024 chiều, int8</td><td>1.024</td><td>≈ 1,0 GB</td><td>Giảm 4 lần</td></tr>
+<tr><td>1024 chiều, nhị phân (1 bit/chiều)</td><td>128</td><td>≈ 128 MB</td><td>Giảm 32 lần, thường cần rescoring</td></tr>
+</tbody></table>
+<p>Chưa tính chi phí cấu trúc chỉ mục (ví dụ liên kết đồ thị của HNSW) — xem cách ước tính đầy đủ ở [[link:truy-hoi/vector-index]].</p>
+
+<h3>Matryoshka: một vector, nhiều kích cỡ</h3>
+<p>Thông thường, cắt bớt các chiều cuối của embedding sẽ phá hỏng nó. <strong>Matryoshka Representation Learning</strong> (MRL) thay đổi cách huấn luyện để các <em>tiền tố</em> của vector — 64, 128, 256… chiều đầu — tự thân đã là những biểu diễn tốt, giống búp bê Matryoshka lồng nhau[[cite:kusupati2022]]. Bài báo gốc báo cáo, chủ yếu trên ImageNet (thị giác), embedding nhỏ hơn tới 14 lần với cùng độ chính xác phân loại và tăng tốc truy hồi quy mô lớn tới 14 lần; phương pháp cũng được áp dụng cho BERT[[cite:kusupati2022]]. Với văn bản, một số mô hình embedding gần đây được huấn luyện theo cách này — hãy kiểm tra model card trước khi cắt chiều. Sau khi cắt, nhớ <strong>chuẩn hóa lại</strong> vector về độ dài 1.</p>
+<p>Cách dùng điển hình: tìm thô bằng vector ngắn (rẻ, nhanh) để lấy vài trăm ứng viên, rồi chấm lại bằng vector đầy đủ.</p>
+
+<h3>Lượng tử hóa int8 và nhị phân</h3>
+<div class="callout nghien-cuu">
+<p>Trong thí nghiệm của Shakir, Aarsen và Lee (2024) trên 15 bộ dữ liệu thuộc phần Retrieval của MTEB, đo bằng NDCG@10[[cite:shakir2024]]:</p>
+<ul>
+<li><strong>Nhị phân</strong> (mỗi chiều thành 1 bit, so sánh bằng khoảng cách Hamming): với mô hình mxbai-embed-large-v1, giữ khoảng 92,5% chất lượng so với float32; thêm bước <em>rescoring</em> — lấy nhiều ứng viên hơn bằng vector nhị phân rồi chấm lại bằng vector truy vấn float32 — nâng lên khoảng 96,5%.</li>
+<li><strong>int8</strong> (mỗi chiều ánh xạ về 256 mức, cần một tập dữ liệu hiệu chỉnh để xác định khoảng giá trị): giữ khoảng 97% không rescoring và khoảng 99% khi có rescoring, với cùng mô hình.</li>
+<li>Mức giữ chất lượng <em>khác nhau nhiều theo mô hình</em>: với e5-base-v2, bản nhị phân chỉ giữ khoảng 75%.</li>
+</ul>
+<p>Điều kiện: số liệu trên tiếng Anh, một số mô hình cụ thể, thời điểm 3/2024. Đừng coi “nhị phân giữ 96%” là quy luật — đo lại với mô hình và dữ liệu của bạn.</p>
+</div>
+
+<h2>Chọn mô hình: dùng MTEB đúng cách</h2>
+<p>MTEB (Massive Text Embedding Benchmark) đánh giá embedding trên nhiều loại tác vụ; kết luận quan trọng nhất của bài báo gốc là <em>không có mô hình nào thắng ở mọi tác vụ</em>[[cite:muennighoff2022]]. Bản mở rộng MMTEB (2025) bao phủ hơn 500 tác vụ trên hơn 250 ngôn ngữ, và ghi nhận mô hình công khai tốt nhất tổng thể lúc đó là multilingual-e5-large-instruct với khoảng 560 triệu tham số — không phải các mô hình hàng tỷ tham số[[cite:enevoldsen2025]].</p>
+
+<div class="callout canh-bao">
+<p><strong>Vì sao không nên chọn mô hình đứng đầu bảng xếp hạng rồi dừng lại:</strong></p>
+<ul>
+<li><strong>Điểm trung bình che khuất tác vụ bạn cần.</strong> Điểm tổng gộp cả phân loại, phân cụm, STS… Hãy nhìn riêng cột Retrieval, và tốt hơn nữa là ngôn ngữ của bạn.</li>
+<li><strong>Miền dữ liệu khác.</strong> BEIR cho thấy nhiều mô hình dense kém tổng quát hóa ra ngoài miền huấn luyện, trong khi BM25 vẫn là baseline zero-shot mạnh[[cite:thakur2021]].</li>
+<li><strong>Rò rỉ dữ liệu</strong>: khi bộ dữ liệu benchmark công khai, dữ liệu huấn luyện của mô hình mới có thể chồng lấn với dữ liệu kiểm thử, làm điểm số đẹp hơn thực tế.</li>
+<li><strong>Bảng xếp hạng thay đổi liên tục.</strong> Tên mô hình “tốt nhất” trong bài viết nào (kể cả bài này) cũng sẽ lỗi thời; quy trình đánh giá thì không.</li>
+</ul>
+</div>
+
+<h3>Tiêu chí chọn mô hình</h3>
+<table>
+<thead><tr><th>Tiêu chí</th><th>Câu hỏi cần trả lời</th><th>Vì sao quan trọng</th></tr></thead>
+<tbody>
+<tr><td>Ngôn ngữ</td><td>Có hỗ trợ tiếng Việt? Truy vấn và tài liệu cùng ngôn ngữ hay khác?</td><td>Mô hình chỉ tiếng Anh cho kết quả tiếng Việt rất kém.</td></tr>
+<tr><td>Độ dài tối đa</td><td>512, 8.192 token…? Chunk của bạn dài bao nhiêu token?</td><td>Phần vượt giới hạn bị cắt bỏ, thường không báo lỗi.</td></tr>
+<tr><td>Tiền xử lý</td><td>Cần tiền tố/chỉ dẫn? Cần tách từ?</td><td>Sai quy ước làm giảm chất lượng âm thầm.</td></tr>
+<tr><td>Số chiều, kiểu dữ liệu</td><td>Bao nhiêu chiều? Hỗ trợ Matryoshka, int8?</td><td>Quyết định bộ nhớ và chi phí chỉ mục.</td></tr>
+<tr><td>Triển khai</td><td>Tự host hay API? Cần GPU? Độ trễ embed một truy vấn?</td><td>Ảnh hưởng chi phí, độ trễ và quyền riêng tư dữ liệu.</td></tr>
+<tr><td>Giấy phép</td><td>Cho phép dùng thương mại?</td><td>Một số mô hình chỉ cho phép nghiên cứu.</td></tr>
+<tr><td>Chất lượng trên dữ liệu của bạn</td><td>Recall@k trên bộ câu hỏi thật?</td><td>Tiêu chí quyết định; mọi thứ khác chỉ để thu hẹp danh sách.</td></tr>
+</tbody></table>
+
+<ol class="steps">
+<li><strong>Thu thập 50–200 câu hỏi thật</strong> (từ log tìm kiếm, ticket hỗ trợ, phỏng vấn người dùng), gắn nhãn đoạn đúng cho mỗi câu. Bao gồm cả câu không dấu, câu có mã sản phẩm, câu dài. Con số này là điểm khởi đầu thực dụng, không phải chuẩn thống kê.</li>
+<li><strong>Chọn 3–5 mô hình ứng viên</strong> từ bảng xếp hạng (cột Retrieval, đa ngôn ngữ) cộng với BM25 làm baseline.</li>
+<li><strong>Lập chỉ mục cùng một bộ chunk</strong> với từng mô hình, đúng quy ước tiền tố của mỗi mô hình.</li>
+<li><strong>Đo Recall@k và nDCG@k</strong> (xem [[link:danh-gia/do-luong-retrieval]]), kèm độ trễ và bộ nhớ. Đọc kỹ các câu mà mô hình trượt — chúng thường chỉ ra vấn đề ở dữ liệu hoặc chunking chứ không riêng mô hình.</li>
+</ol>
+
+<h2>Đổi mô hình nghĩa là lập chỉ mục lại</h2>
+<p>Vector từ hai mô hình khác nhau nằm trong hai không gian <em>không tương thích</em>: so sánh vector truy vấn của mô hình B với vector tài liệu của mô hình A cho kết quả vô nghĩa, kể cả khi số chiều trùng nhau. Tài liệu Elasticsearch nhấn mạnh vector truy vấn phải cùng số chiều <em>và cùng mô hình</em> với vector tài liệu[[cite:esknn]]. Ngay cả nâng cấp “nhỏ” (phiên bản mới của cùng mô hình, đổi tiền tố, đổi cách chuẩn hóa văn bản) cũng nên coi như đổi mô hình.</p>
+<div class="callout kinh-nghiem">
+<p><strong>Thực hành phổ biến khi nâng cấp mô hình embedding:</strong> lưu tên + phiên bản mô hình trong metadata chỉ mục; xây chỉ mục mới song song (blue/green), chạy bộ kiểm thử trên cả hai, chuyển lưu lượng khi chỉ mục mới tốt hơn, giữ chỉ mục cũ một thời gian để quay lui. Với kho lớn, chi phí embed lại toàn bộ (thời gian GPU hoặc phí API) cần được tính trước — xem [[link:van-hanh/chi-phi-do-tre]].</p>
+</div>
+
+<h2>Giới hạn của embedding</h2>
+<details class="qa"><summary>Embedding có hiểu phủ định và con số không?</summary>
+<p>Thường không tốt. “Sản phẩm <em>được</em> đổi trả” và “sản phẩm <em>không được</em> đổi trả” có thể có vector rất gần nhau vì chung gần hết nội dung. Tương tự “lãi suất 6 tháng” và “lãi suất 12 tháng”. Embedding đo <em>chủ đề gần nhau</em>, không đảm bảo <em>trả lời đúng câu hỏi</em>. Reranker và bước sinh có kiểm chứng trích dẫn giúp bù lại — xem [[link:tim-kiem/reranking]] và [[link:sinh/trich-dan-grounding]].</p></details>
+<details class="qa"><summary>Vì sao tìm mã sản phẩm “SM-A556E” bằng embedding lại trả về sản phẩm khác?</summary>
+<p>Mã, số hiệu văn bản (“Thông tư 39/2016/TT-NHNN”), tên riêng hiếm bị tokenizer cắt thành mảnh vụn và ít xuất hiện trong dữ liệu huấn luyện, nên vector của chúng không phân biệt tốt. Đây là trường hợp kinh điển mà tìm kiếm từ khóa thắng; giải pháp thông dụng là hybrid search — xem [[link:tim-kiem/hybrid-search]].</p></details>
+<details class="qa"><summary>Chunk dài có cho embedding “giàu thông tin” hơn không?</summary>
+<p>Không hẳn. Một vector duy nhất phải tóm cả đoạn; đoạn càng nhiều ý, vector càng “trung bình hóa” và khó khớp sắc với một câu hỏi cụ thể. Ngoài ra phần vượt giới hạn token bị cắt bỏ. Mối liên hệ giữa kích thước chunk và chất lượng truy hồi được bàn ở [[link:du-lieu/chunking]] và [[link:du-lieu/metadata-va-bieu-dien]].</p></details>
+<details class="qa"><summary>Embedding có rò rỉ thông tin không?</summary>
+<p>Vector không phải văn bản rõ, nhưng cũng không nên coi là đã ẩn danh. OWASP Top 10 cho ứng dụng LLM bản 2025 có hẳn một mục về điểm yếu của vector và embedding (LLM08)[[cite:owasp2025]]. Chỉ mục vector cần được bảo vệ và phân quyền như chính tài liệu gốc — xem [[link:van-hanh/bao-mat]].</p></details>
+
+<div class="callout nhan-dinh">
+<p>Theo nhận định của người biên soạn, với đa số dự án RAG tiếng Việt quy mô vừa, khác biệt giữa các mô hình embedding đa ngôn ngữ tốt thường <em>nhỏ hơn</em> khác biệt do chunking, làm sạch dữ liệu, hybrid search và reranking mang lại. Vì vậy nên chọn một mô hình “đủ tốt”, dễ vận hành, rồi dành công sức cho bộ kiểm thử và các khâu khác; chỉ quay lại tối ưu mô hình khi số đo cho thấy embedding là điểm nghẽn. Đây là nhận định thực hành, cần được kiểm chứng trên dữ liệu của bạn.</p>
+</div>
+
+<h2>Tự kiểm tra hiểu biết</h2>
+<div class="callout kiem-chung">
+<ol>
+<li>Vì sao khi vector đã chuẩn hóa, xếp hạng theo cosine, dot product và L2 cho cùng kết quả? (Gợi ý: ‖a − b‖² = 2 − 2·cos.)</li>
+<li>Một đồng nghiệp đặt ngưỡng “cosine &gt; 0,7 là liên quan” cho mọi mô hình. Điều gì sai trong lập luận này?</li>
+<li>Bạn dùng multilingual-e5 nhưng quên tiền tố <code>query:</code>. Bạn sẽ phát hiện lỗi này bằng cách nào? (Gợi ý: so sánh Recall@k trên bộ kiểm thử khi có và không có tiền tố.)</li>
+<li>Với 5 triệu chunk, mô hình 1024 chiều float32, vector thô chiếm bao nhiêu bộ nhớ? Bao nhiêu nếu dùng int8? (Đáp án: ≈ 20,5 GB và ≈ 5,1 GB.)</li>
+<li>Vì sao không thể chỉ embed lại các tài liệu mới bằng mô hình mới và giữ nguyên tài liệu cũ?</li>
+</ol>
+</div>
+
+<h2>Đọc tiếp</h2>
+<ul>
+<li>Bài tiếp theo: [[link:truy-hoi/vector-index]] — tìm nhanh vector gần nhất trong hàng triệu bản ghi, HNSW, IVF, PQ và ước tính bộ nhớ.</li>
+<li>Khi embedding không đủ: [[link:tim-kiem/hybrid-search]] (kết hợp từ khóa) và [[link:tim-kiem/reranking]] (cross-encoder, ColBERT).</li>
+<li>Đo xem mô hình nào tốt hơn trên dữ liệu của bạn: [[link:danh-gia/do-luong-retrieval]].</li>
+<li>Bài báo nên đọc: DPR[[cite:karpukhin2020]] cho ý tưởng bi-encoder trong QA; Sentence-BERT[[cite:reimers2019]]; BGE-M3[[cite:chen2024m3]] cho mô hình đa ngôn ngữ đa chức năng; MTEB[[cite:muennighoff2022]] để hiểu cách benchmark được xây dựng.</li>
+</ul>

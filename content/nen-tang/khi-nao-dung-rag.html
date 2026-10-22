@@ -1,0 +1,191 @@
+---
+{
+  "title": "Khi nào nên dùng RAG — và khi nào không?",
+  "navTitle": "Khi nào nên dùng RAG?",
+  "description": "So sánh RAG với prompt thuần, fine-tuning, ngữ cảnh dài và gọi công cụ/SQL theo chi phí, độ mới, độ trễ, trích dẫn, quy mô dữ liệu; kèm sơ đồ ra quyết định và các cách kết hợp.",
+  "lead": "“Có nên làm RAG không?” thường là câu hỏi sai. Câu hỏi đúng là: mô hình đang thiếu cái gì — kiến thức, kỹ năng, dữ liệu có cấu trúc hay khả năng hành động? Mỗi loại thiếu hụt có một công cụ phù hợp, và RAG chỉ là một trong số đó.",
+  "level": "Người mới",
+  "reviewed": "2026-10-22",
+  "kinds": ["nen-tang", "nghien-cuu", "kinh-nghiem", "nhan-dinh"]
+}
+---
+<div class="callout tom-tat">
+<ul>
+<li>Chọn phương án theo <strong>loại thiếu hụt</strong>: thiếu <em>kiến thức</em> nằm trong tài liệu → RAG hoặc ngữ cảnh dài; thiếu <em>kỹ năng, định dạng, văn phong</em> → ví dụ trong prompt hoặc fine-tuning; cần <em>số liệu chính xác, tính toán, hành động</em> → gọi công cụ (SQL, API).</li>
+<li>Trong các thí nghiệm đã công bố, RAG bổ sung kiến thức <em>sự kiện</em> tốt hơn fine-tuning không giám sát; còn ngữ cảnh dài, khi đủ tài nguyên, có thể cho chất lượng trung bình cao hơn RAG nhưng tốn hơn nhiều. Cả hai kết luận đều gắn với mô hình và bộ dữ liệu cụ thể.</li>
+<li>Kho tài liệu nhỏ, ổn định (vài trăm trang) có thể không cần RAG: đưa nguyên tài liệu vào prompt kèm prompt caching thường đơn giản hơn.</li>
+<li>Hệ thống thực tế thường <strong>kết hợp</strong>: RAG cho văn bản, SQL cho số liệu, fine-tuning nhẹ cho định dạng, và một bộ định tuyến chọn nhánh.</li>
+</ul>
+</div>
+
+<h2>Bắt đầu từ câu hỏi: mô hình đang thiếu gì?</h2>
+<p>Hãy xét bốn yêu cầu mà một đội sản phẩm ở một sàn thương mại điện tử có thể nhận trong cùng một tuần:</p>
+<ol>
+<li>“Trợ lý chăm sóc khách hàng phải trả lời đúng chính sách đổi trả <em>mới nhất</em> và dẫn đúng điều khoản.”</li>
+<li>“Câu trả lời phải theo giọng thương hiệu: xưng ‘mình’, ngắn gọn, luôn kết thúc bằng gợi ý bước tiếp theo.”</li>
+<li>“Khách hỏi ‘đơn hàng của tôi đang ở đâu?’ thì phải trả lời theo trạng thái thật trong hệ thống.”</li>
+<li>“Tóm tắt giúp tôi bản hợp đồng 40 trang với đối tác vận chuyển này.”</li>
+</ol>
+<p>Bốn yêu cầu này nghe giống nhau (“làm chatbot thông minh hơn”) nhưng thiếu hụt ở bốn chỗ khác nhau. Yêu cầu 1 thiếu <strong>kiến thức riêng, thay đổi theo thời gian, cần truy nguồn</strong> — đất của RAG. Yêu cầu 2 thiếu <strong>hành vi</strong> — mô hình đã biết tiếng Việt, chỉ chưa biết “cách nói” mong muốn. Yêu cầu 3 thiếu <strong>dữ liệu có cấu trúc theo thời gian thực</strong> — trạng thái đơn hàng nằm trong cơ sở dữ liệu, không nằm trong văn bản nào. Yêu cầu 4 có <strong>đúng một tài liệu đã biết trước</strong> — không có gì phải “tìm”.</p>
+<div class="callout nen-tang">
+<p><strong>Phân loại thiếu hụt.</strong> Một cách nghĩ ổn định, không phụ thuộc mô hình cụ thể: (a) <em>kiến thức</em> — sự kiện, quy định, nội dung tài liệu; (b) <em>kỹ năng/hành vi</em> — định dạng đầu ra, văn phong, cách suy luận theo miền; (c) <em>truy cập dữ liệu sống và hành động</em> — số dư, tồn kho, trạng thái, giao dịch. RAG nhắm vào (a). Nó gần như không thay đổi (b) và là công cụ kém cho (c).</p>
+</div>
+
+<h2>Năm phương án và cơ chế của chúng</h2>
+
+<h3>1. Prompt thuần (prompt-only)</h3>
+<p>Chỉ viết hướng dẫn hệ thống (system prompt) và có thể thêm vài ví dụ mẫu (few-shot). Không có dữ liệu ngoài. Phù hợp khi kiến thức cần dùng là kiến thức phổ thông mà mô hình đã có (giải thích khái niệm, viết lại câu, phân loại cảm xúc) hoặc khi người dùng tự dán dữ liệu vào. Đây luôn là <em>baseline</em> (mốc so sánh) đầu tiên: nếu prompt tốt đã đủ, mọi thứ phức tạp hơn đều là chi phí thừa.</p>
+
+<h3>2. RAG</h3>
+<p>Ở mỗi câu hỏi, hệ thống tìm vài đoạn tài liệu liên quan trong một chỉ mục rồi đặt vào prompt (xem [[link:nen-tang/rag-la-gi]]). Kiến thức nằm <em>ngoài</em> mô hình: cập nhật bằng cách cập nhật chỉ mục, mỗi đoạn có địa chỉ để trích dẫn, và có thể lọc theo quyền của người hỏi. Cái giá là một pipeline nhiều thành phần — và chất lượng bị chặn trên bởi khâu truy hồi: tài liệu đúng không được tìm thấy thì mô hình giỏi đến đâu cũng không trả lời đúng.</p>
+
+<h3>3. Fine-tuning (tinh chỉnh)</h3>
+<p>Huấn luyện tiếp mô hình trên dữ liệu của bạn để thay đổi trọng số. Có hai dạng hay bị nhập làm một: <em>fine-tuning có giám sát</em> trên cặp (đầu vào, đầu ra mong muốn) — hiệu quả để dạy định dạng, văn phong, cách phân loại; và <em>huấn luyện tiếp không giám sát</em> trên văn bản thô — với kỳ vọng mô hình “học thuộc” tài liệu. Dạng thứ hai chính là dạng thường bị kỳ vọng thay thế RAG, và cũng là dạng có bằng chứng yếu nhất (xem phần nghiên cứu bên dưới). Fine-tuning không cho trích dẫn, không phân quyền theo người dùng, và mỗi lần tài liệu đổi phải huấn luyện lại.</p>
+
+<h3>4. Ngữ cảnh dài (long-context)</h3>
+<p>Đưa nguyên tài liệu — hoặc nguyên kho nếu đủ nhỏ — vào cửa sổ ngữ cảnh của mô hình. Không cần chunking, embedding hay chỉ mục; không có rủi ro “truy hồi sót”. Đổi lại, chi phí và độ trễ tăng theo số token <em>ở mỗi truy vấn</em>, kho phải vừa cửa sổ, và mô hình không nhất thiết khai thác đều mọi vị trí trong ngữ cảnh dài[[cite:liu2023lost]]. Prompt caching (lưu đệm phần đầu prompt giống nhau giữa các lượt gọi) làm giảm đáng kể chi phí khi cùng một tài liệu được hỏi nhiều lần.</p>
+
+<h3>5. Gọi công cụ (tool use): SQL, API, hàm</h3>
+<p>Mô hình sinh ra một lời gọi có cấu trúc — câu SQL, tham số API — để hệ thống thực thi rồi trả kết quả về cho mô hình diễn đạt. Toolformer là một trong các công trình sớm cho thấy mô hình có thể học khi nào nên gọi máy tính, công cụ tìm kiếm hay lịch[[cite:schick2023toolformer]]; ngày nay hầu hết API LLM thương mại đều hỗ trợ function calling. Đây là lựa chọn đúng cho câu hỏi về <em>số liệu chính xác</em> (“doanh thu tháng 9 của chi nhánh Đà Nẵng”), <em>trạng thái hiện thời</em> (đơn hàng, tồn kho, số dư) và <em>hành động</em> (đặt lịch, mở phiếu hỗ trợ). Lưu ý: “truy hồi” trong RAG cũng có thể được cài như một công cụ — ranh giới giữa hai phương án mềm hơn ta tưởng.</p>
+
+<h2>Bảng đánh đổi</h2>
+<p>Bảng dưới so sánh theo các tiêu chí thường quyết định trong thực tế. Đây là xu hướng điển hình, không phải định luật; mức độ cụ thể phụ thuộc mô hình, giá và dữ liệu tại thời điểm bạn đo.</p>
+<table>
+<thead><tr><th>Tiêu chí</th><th>Prompt thuần</th><th>RAG</th><th>Fine-tuning</th><th>Ngữ cảnh dài</th><th>Gọi công cụ / SQL</th></tr></thead>
+<tbody>
+<tr><td>Chi phí dựng ban đầu</td><td>Rất thấp</td><td>Trung bình (pipeline, chỉ mục)</td><td>Cao (dữ liệu huấn luyện, GPU hoặc phí huấn luyện)</td><td>Rất thấp</td><td>Trung bình (định nghĩa công cụ, lớp truy cập dữ liệu)</td></tr>
+<tr><td>Chi phí mỗi truy vấn</td><td>Thấp</td><td>Thấp–trung bình (chỉ vài đoạn trong prompt)</td><td>Thấp (prompt ngắn)</td><td>Cao, tăng theo độ dài tài liệu; giảm nhờ caching</td><td>Thấp–trung bình (thêm lượt gọi mô hình)</td></tr>
+<tr><td>Độ mới của thông tin</td><td>Theo thời điểm cắt dữ liệu của mô hình</td><td>Tốt: cập nhật chỉ mục là xong</td><td>Kém: phải huấn luyện lại</td><td>Tốt: đưa bản mới vào prompt</td><td>Rất tốt: đọc dữ liệu sống</td></tr>
+<tr><td>Độ trễ</td><td>Thấp</td><td>Thêm bước truy hồi và rerank; thường nhỏ so với thời gian sinh, cần đo</td><td>Thấp</td><td>Cao khi ngữ cảnh rất dài</td><td>Thêm một hoặc nhiều vòng gọi</td></tr>
+<tr><td>Trích dẫn, truy nguồn</td><td>Không</td><td>Có, theo từng đoạn</td><td>Không</td><td>Có thể (chỉ ra vị trí trong tài liệu), khó kiểm khi tài liệu rất dài</td><td>Có: kết quả truy vấn là căn cứ</td></tr>
+<tr><td>Quy mô dữ liệu</td><td>Không áp dụng</td><td>Lớn (triệu tài liệu)</td><td>Giới hạn bởi ngân sách huấn luyện</td><td>Giới hạn bởi cửa sổ ngữ cảnh</td><td>Lớn, nhưng phải có cấu trúc</td></tr>
+<tr><td>Dạy kỹ năng, văn phong, định dạng</td><td>Một phần (qua ví dụ)</td><td>Yếu</td><td>Mạnh</td><td>Một phần (qua ví dụ)</td><td>Không</td></tr>
+<tr><td>Phân quyền theo người dùng</td><td>Không áp dụng</td><td>Có (lọc khi truy hồi)</td><td>Không: kiến thức đã nằm trong trọng số chung</td><td>Có (chọn tài liệu đưa vào)</td><td>Có (quyền ở tầng dữ liệu)</td></tr>
+<tr><td>Rủi ro chính</td><td>Bịa khi thiếu kiến thức</td><td>Truy hồi sót/sai</td><td>Lỗi thời, khó gỡ thông tin sai</td><td>Chi phí, “lạc ở giữa”</td><td>Sinh truy vấn sai, rủi ro bảo mật khi thực thi</td></tr>
+</tbody>
+</table>
+<p>Một điểm hay bị bỏ qua trong bảng là <strong>khả năng xóa</strong>. Nếu một tài liệu bị rút lại (chính sách hết hiệu lực, dữ liệu cá nhân bị yêu cầu xóa), với RAG bạn xóa nó khỏi chỉ mục; với fine-tuning, không có cách đơn giản và đáng tin để “gỡ” một sự kiện khỏi trọng số.</p>
+
+<h2>Bằng chứng nghiên cứu nói gì</h2>
+
+<h3>RAG hay fine-tuning để bổ sung kiến thức?</h3>
+<div class="callout nghien-cuu">
+<p>Ovadia và cộng sự so sánh <em>huấn luyện tiếp không giám sát</em> với RAG để đưa kiến thức vào ba mô hình 7B (Llama2-7B, Mistral-7B, Orca2-7B), trên năm chủ đề của MMLU nặng về sự kiện (giải phẫu, thiên văn, sinh học đại học, hóa học đại học, tiền sử) và một bộ 910 câu hỏi trắc nghiệm về sự kiện thời sự Mỹ tháng 8–11/2023, tức sau thời điểm cắt dữ liệu của các mô hình. Kho tri thức là các bài Wikipedia, truy hồi bằng embedding bge-large-en với FAISS[[cite:ovadia2023]].</p>
+<p>Kết quả: RAG nhìn chung tốt hơn fine-tuning không giám sát, rõ nhất ở bộ câu hỏi thời sự (kiến thức mới), nơi RAG trên mô hình gốc cao nhất ở cả ba mô hình; trên MMLU, chênh lệch nhỏ hơn và ở một số ô (chủ yếu với Llama2-7B) fine-tune cộng RAG còn nhỉnh hơn. Ví dụ với bộ câu hỏi thời sự, Mistral-7B đạt 0,481 khi không có gì, 0,875 với RAG, nhưng chỉ 0,504 khi fine-tune trên văn bản gốc; với Llama2-7B, fine-tuning thậm chí làm độ chính xác giảm (0,353 → 0,219). Fine-tune trên nhiều bản diễn đạt lại (paraphrase) của cùng dữ kiện giúp cải thiện, và tác giả cho rằng kiến thức cần được “lặp lại theo nhiều cách” để mô hình học được. Đáng chú ý: trên bộ câu hỏi thời sự, cộng RAG lên mô hình đã fine-tune lại kém hơn RAG trên mô hình gốc ở cả ba mô hình.</p>
+<p><strong>Điều kiện cần nhớ:</strong> mô hình nhỏ (7B), câu hỏi trắc nghiệm về sự kiện, fine-tuning không giám sát. Kết quả không nói gì về fine-tuning có giám sát để dạy định dạng, hay về mô hình lớn hơn nhiều.</p>
+</div>
+
+<h3>RAG hay ngữ cảnh dài?</h3>
+<div class="callout nghien-cuu">
+<p>Li và cộng sự so sánh hai cách trên 7 bộ của LongBench và 2 bộ của ∞Bench, với ba mô hình Gemini-1.5-Pro, GPT-4o (bản 2024-05-13) và GPT-3.5-Turbo; nhánh RAG dùng bộ truy hồi Contriever, chunk 300 từ, lấy top-5[[cite:li2024selfroute]]. Kết luận chính: <em>khi đủ tài nguyên</em>, đưa nguyên văn bản vào ngữ cảnh dài cho điểm trung bình cao hơn RAG một cách nhất quán; RAG có lợi thế lớn về chi phí. Đồng thời, với khoảng 63% câu hỏi, hai cách cho <em>cùng một</em> dự đoán.</p>
+<p>Từ đó tác giả đề xuất <strong>Self-Route</strong>: thử RAG trước và cho mô hình tự đánh giá xem đoạn truy hồi có đủ để trả lời không; chỉ khi mô hình báo “không trả lời được” mới chuyển sang ngữ cảnh dài. Cách này giữ chất lượng gần với ngữ cảnh dài trong khi giảm chi phí khoảng 65% với Gemini-1.5-Pro và 39% với GPT-4o theo báo cáo của bài. Các trường hợp RAG thất bại được phân tích gồm: câu hỏi cần suy luận nhiều bước, câu hỏi quá chung chung, câu hỏi dài và phức tạp, và câu hỏi ngầm cần hiểu toàn bộ văn bản.</p>
+<p><strong>Điều kiện cần nhớ:</strong> các bộ đánh giá là văn bản tiếng Anh dài có kích thước vừa cửa sổ của mô hình; mô hình và giá là của năm 2024. Trong kho doanh nghiệp lớn hơn cửa sổ nhiều lần, nhánh “ngữ cảnh dài thuần” không tồn tại.</p>
+</div>
+<p>Một nghiên cứu khác của Xu và cộng sự (ICLR 2024) trên một mô hình GPT 43B nội bộ và Llama2-70B cho thấy hai hướng không loại trừ nhau: mô hình cửa sổ 4K có truy hồi đạt mức tương đương mô hình được mở rộng lên 16K, và truy hồi vẫn cải thiện kết quả ngay cả khi cửa sổ đã được mở rộng; Llama2-70B 32K có truy hồi vượt GPT-3.5-turbo-16k trên trung bình chín tác vụ ngữ cảnh dài của họ[[cite:xu2023retrievallong]].</p>
+<p>Các kết quả trên cần đọc cùng với “Lost in the Middle”: trên các mô hình năm 2023, độ chính xác thường cao nhất khi thông tin liên quan nằm đầu hoặc cuối ngữ cảnh và giảm khi nó nằm giữa[[cite:liu2023lost]]. Mô hình mới hơn có thể đã cải thiện hiện tượng này — đây chính là lý do bạn nên tự đo trên mô hình mình dùng thay vì dựa vào kết luận cũ.</p>
+
+<div class="callout kinh-nghiem">
+<p><strong>Ngưỡng “kho nhỏ thì không cần RAG”.</strong> Trong bài giới thiệu Contextual Retrieval (09/2024), Anthropic gợi ý rằng nếu kho tri thức dưới khoảng 200.000 token (khoảng 500 trang), có thể đưa toàn bộ vào prompt và dùng prompt caching thay vì dựng RAG[[cite:anthropic2024contextual]]. Đây là khuyến nghị của một nhà cung cấp mô hình, gắn với cửa sổ ngữ cảnh và bảng giá của họ tại thời điểm đó — hãy coi là điểm khởi đầu để tính toán lại với mô hình, giá và lưu lượng của bạn, không phải ngưỡng cố định.</p>
+</div>
+
+<h2>Sơ đồ ra quyết định</h2>
+<figure class="diagram">
+<svg viewBox="0 0 760 470" width="760" role="img" aria-labelledby="kn-t kn-d">
+<title id="kn-t">Sơ đồ chọn phương án: công cụ, prompt thuần, ngữ cảnh dài hay RAG</title>
+<desc id="kn-d">Ba câu hỏi theo thứ tự. Một: câu trả lời cần dữ liệu có cấu trúc, tính toán hoặc hành động? Nếu có, dùng gọi công cụ. Hai: kiến thức cần dùng có nằm trong tài liệu riêng, mới hoặc cần trích dẫn? Nếu không, dùng prompt thuần. Ba: tài liệu liên quan có nhỏ, ổn định và vừa ngân sách ngữ cảnh? Nếu có, dùng ngữ cảnh dài; nếu không, dùng RAG. Song song: nếu vấn đề là định dạng, văn phong hay kỹ năng, cân nhắc fine-tuning kết hợp với nhánh đã chọn.</desc>
+<defs><marker id="kn-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="arrowhead"/></marker></defs>
+<rect x="20" y="20" width="400" height="64" rx="8" class="box"/>
+<text x="220" y="46" font-size="13.5" text-anchor="middle">① Cần số liệu có cấu trúc, tính toán</text>
+<text x="220" y="66" font-size="13.5" text-anchor="middle">hoặc thực hiện hành động?</text>
+<rect x="480" y="20" width="260" height="64" rx="8" class="box-b"/>
+<text x="610" y="46" font-size="14" text-anchor="middle" font-weight="700">Gọi công cụ</text>
+<text x="610" y="66" font-size="11.5" text-anchor="middle" class="muted">SQL, API, hàm tính toán</text>
+<rect x="20" y="120" width="400" height="64" rx="8" class="box"/>
+<text x="220" y="146" font-size="13.5" text-anchor="middle">② Kiến thức nằm trong tài liệu riêng,</text>
+<text x="220" y="166" font-size="13.5" text-anchor="middle">thay đổi, hoặc cần trích dẫn?</text>
+<rect x="480" y="120" width="260" height="64" rx="8" class="box-w"/>
+<text x="610" y="146" font-size="14" text-anchor="middle" font-weight="700">Prompt thuần</text>
+<text x="610" y="166" font-size="11.5" text-anchor="middle" class="muted">hướng dẫn + ví dụ mẫu</text>
+<rect x="20" y="220" width="400" height="64" rx="8" class="box"/>
+<text x="220" y="246" font-size="13.5" text-anchor="middle">③ Tài liệu liên quan nhỏ, ổn định, vừa</text>
+<text x="220" y="266" font-size="13.5" text-anchor="middle">cửa sổ ngữ cảnh và ngân sách mỗi truy vấn?</text>
+<rect x="480" y="220" width="260" height="64" rx="8" class="box-w"/>
+<text x="610" y="246" font-size="14" text-anchor="middle" font-weight="700">Ngữ cảnh dài</text>
+<text x="610" y="266" font-size="11.5" text-anchor="middle" class="muted">nguyên tài liệu + prompt caching</text>
+<rect x="20" y="320" width="400" height="56" rx="8" class="box-a"/>
+<text x="220" y="344" font-size="14" text-anchor="middle" font-weight="700">RAG</text>
+<text x="220" y="362" font-size="11.5" text-anchor="middle" class="muted">truy hồi đoạn liên quan → sinh có trích dẫn</text>
+<path d="M420 52h58M420 152h58M420 252h58" class="ln" marker-end="url(#kn-ah)"/>
+<path d="M220 84v34M220 184v34M220 284v34" class="ln" marker-end="url(#kn-ah)"/>
+<text x="449" y="45" font-size="11.5" text-anchor="middle" class="muted">có</text>
+<text x="449" y="145" font-size="11.5" text-anchor="middle" class="muted">không</text>
+<text x="449" y="245" font-size="11.5" text-anchor="middle" class="muted">có</text>
+<text x="238" y="106" font-size="11.5" class="muted">không</text>
+<text x="238" y="206" font-size="11.5" class="muted">có</text>
+<text x="238" y="306" font-size="11.5" class="muted">không</text>
+<rect x="20" y="400" width="720" height="54" rx="8" class="box-v"/>
+<text x="380" y="422" font-size="13" text-anchor="middle">Song song: vấn đề nằm ở định dạng, văn phong hay kỹ năng theo miền?</text>
+<text x="380" y="442" font-size="11.5" text-anchor="middle" class="muted">→ thử ví dụ trong prompt trước; nếu chưa đủ, fine-tuning có giám sát, kết hợp với nhánh đã chọn ở trên</text>
+</svg>
+<figcaption>Ba câu hỏi đầu chọn nguồn kiến thức; câu hỏi “song song” chọn cách điều chỉnh hành vi. Một sản phẩm thường đi qua sơ đồ nhiều lần, mỗi lần cho một loại câu hỏi.</figcaption>
+</figure>
+<p>Sơ đồ cố ý đặt “gọi công cụ” lên đầu: nếu câu trả lời phụ thuộc vào một con số trong cơ sở dữ liệu, dùng RAG trên bản xuất CSV hay báo cáo PDF của dữ liệu đó là một thiết kế dễ gãy — dữ liệu cũ đi ngay khi xuất, và mô hình phải “đọc” bảng thay vì để cơ sở dữ liệu tính. Câu hỏi ② loại bỏ những trường hợp không cần dữ liệu ngoài. Câu hỏi ③ là nơi phép tính chi phí quyết định: cùng một hợp đồng 40 trang được hỏi 5 lần thì đưa nguyên văn là hợp lý; 5.000 tài liệu được hỏi 50.000 lần mỗi ngày thì không.</p>
+
+<h2>Áp dụng vào các tình huống cụ thể</h2>
+<table>
+<thead><tr><th>Tình huống</th><th>Thiếu hụt chính</th><th>Lựa chọn hợp lý</th><th>Vì sao</th></tr></thead>
+<tbody>
+<tr><td>Trợ lý CSKH trả lời chính sách đổi trả, bảo hành, vận chuyển của sàn TMĐT</td><td>Kiến thức riêng, thay đổi hằng tháng, cần dẫn điều khoản</td><td>RAG</td><td>Hàng trăm trang chính sách theo ngành hàng; cần biết bản nào đang hiệu lực và chỉ ra điều khoản.</td></tr>
+<tr><td>“Đơn hàng của tôi đang ở đâu?”, “Tôi còn bao nhiêu điểm thưởng?”</td><td>Dữ liệu sống theo từng khách</td><td>Gọi công cụ (API đơn hàng)</td><td>Câu trả lời không nằm trong văn bản nào; cần xác thực người hỏi.</td></tr>
+<tr><td>Chuyên viên ngân hàng tra quy trình thẩm định tín dụng nội bộ</td><td>Kiến thức riêng, phân quyền theo phòng ban</td><td>RAG có lọc quyền</td><td>Tài liệu nhiều phiên bản; mỗi phòng chỉ được xem một phần. Xem [[link:van-hanh/bao-mat]].</td></tr>
+<tr><td>“Lãi suất tiết kiệm 12 tháng hôm nay là bao nhiêu?”</td><td>Số liệu có cấu trúc, đổi theo ngày</td><td>Gọi công cụ (bảng lãi suất) + RAG cho phần điều kiện áp dụng</td><td>Con số lấy từ nguồn chuẩn; điều kiện, ngoại lệ lấy từ văn bản sản phẩm.</td></tr>
+<tr><td>Tóm tắt và hỏi đáp về một hợp đồng 40 trang vừa tải lên</td><td>Một tài liệu cụ thể, đã biết trước</td><td>Ngữ cảnh dài</td><td>Không có bước “tìm” nào để làm; chunking chỉ thêm rủi ro bỏ sót điều khoản.</td></tr>
+<tr><td>Trả lời theo giọng thương hiệu, đúng mẫu định dạng của tổng đài</td><td>Hành vi, văn phong</td><td>Ví dụ trong prompt → fine-tuning có giám sát nếu cần</td><td>Không phải thiếu kiến thức; RAG không giải quyết được.</td></tr>
+<tr><td>Hỏi đáp trên kho văn bản pháp luật về thuế (hàng nghìn văn bản, sửa đổi chồng chéo)</td><td>Kiến thức lớn, có hiệu lực theo thời gian, cần trích dẫn chính xác</td><td>RAG có metadata hiệu lực + có thể truy hồi lặp</td><td>Câu hỏi thường cần nối nhiều văn bản; xem [[link:nang-cao/agentic-graphrag]] và [[link:nang-cao/tinh-huong-ung-dung]].</td></tr>
+</tbody>
+</table>
+
+<h2>Các cách kết hợp phổ biến</h2>
+<p>Trong sản phẩm thật, câu hỏi “chọn A hay B” hiếm khi có đáp án duy nhất. Dưới đây là các kiểu kết hợp hay gặp; xếp từ đơn giản tới phức tạp.</p>
+<ol class="steps">
+<li><strong>RAG + prompt tốt.</strong> Mặc định cho hỏi đáp tài liệu. Phần lớn công sức nằm ở dữ liệu và truy hồi, không ở prompt. Đây là cấu hình nên dựng đầu tiên (xem [[link:thuc-hanh/rag-dau-tien]]).</li>
+<li><strong>RAG + gọi công cụ, có bộ định tuyến.</strong> Một bước phân loại (bằng quy tắc hoặc LLM) quyết định câu hỏi đi nhánh văn bản, nhánh SQL/API, hay cả hai. Ở ví dụ lãi suất trên, con số đến từ API, điều kiện đến từ RAG, và câu trả lời trích dẫn cả hai.</li>
+<li><strong>RAG + ngữ cảnh dài.</strong> Thay vì đưa 5 chunk nhỏ, truy hồi để chọn <em>tài liệu</em> rồi đưa nguyên tài liệu (hoặc phần lớn) vào cửa sổ dài. Self-Route là một biến thể có định tuyến: thử RAG rẻ trước, chỉ leo thang lên ngữ cảnh dài khi mô hình báo không đủ thông tin[[cite:li2024selfroute]].</li>
+<li><strong>RAG + fine-tuning.</strong> Fine-tune có giám sát để mô hình quen định dạng trả lời, cách trích dẫn, cách từ chối khi tài liệu không đủ — còn kiến thức vẫn đến từ truy hồi. Hướng này hợp lý khi bạn đã có dữ liệu hội thoại chất lượng và lưu lượng đủ lớn để chi phí huấn luyện được bù lại; nó không thay thế truy hồi.</li>
+<li><strong>Agentic RAG.</strong> Mô hình tự quyết định khi nào truy hồi, truy hồi gì, có cần gọi công cụ khác không, qua nhiều vòng. Linh hoạt nhất nhưng khó kiểm soát độ trễ, chi phí và khó đánh giá nhất. Xem [[link:nang-cao/agentic-graphrag]].</li>
+</ol>
+
+<div class="callout canh-bao">
+<p><strong>Lỗi thường gặp khi chọn phương án</strong></p>
+<ul>
+<li><em>Fine-tune để “nạp tài liệu” rồi kỳ vọng trích dẫn được.</em> Trọng số không lưu địa chỉ nguồn; mô hình không thể chỉ ra nó học điều gì từ trang nào.</li>
+<li><em>RAG trên bản xuất của cơ sở dữ liệu.</em> Báo cáo PDF tồn kho tuần trước trở thành “sự thật” mà trợ lý tự tin trích dẫn.</li>
+<li><em>Dựng RAG cho 30 trang tài liệu.</em> Toàn bộ chi phí của pipeline — chunking, chỉ mục, đánh giá truy hồi — cho một kho mà ngữ cảnh dài xử lý trọn vẹn.</li>
+<li><em>So sánh phương án bằng cảm nhận vài câu hỏi demo.</em> Không có bộ câu hỏi kiểm thử chung thì không so được; xem [[link:danh-gia/do-luong-retrieval]] và [[link:danh-gia/danh-gia-generation]].</li>
+<li><em>Quên chi phí vận hành.</em> RAG cần cập nhật chỉ mục khi dữ liệu đổi; fine-tuning cần huấn luyện lại; ngữ cảnh dài nhân chi phí token theo lưu lượng. Xem [[link:van-hanh/chi-phi-do-tre]].</li>
+</ul>
+</div>
+
+<div class="callout nhan-dinh">
+<p>Chúng tôi cho rằng các tuyên bố kiểu “ngữ cảnh dài đã giết RAG” và “RAG luôn tốt hơn fine-tuning” đều sai cùng một cách: chúng suy rộng kết quả trên một số bộ benchmark sang mọi bài toán. Các thí nghiệm ở trên thực ra cùng chỉ một hướng: các phương án bổ sung cho nhau, và điểm cân bằng dịch chuyển theo giá token, kích thước cửa sổ và kích thước kho dữ liệu. Với kho tài liệu doanh nghiệp điển hình — lớn hơn cửa sổ ngữ cảnh, thay đổi thường xuyên, có phân quyền, cần trích dẫn — truy hồi vẫn là thành phần khó thay thế tính đến 10/2026; điều có thể thay đổi là bạn truy hồi <em>tài liệu</em> rồi đọc dài thay vì truy hồi vài đoạn ngắn.</p>
+</div>
+
+<h2>Cách kiểm chứng lựa chọn của bạn</h2>
+<div class="callout kiem-chung">
+<ol>
+<li>Lập bộ 30–50 câu hỏi thật (lấy từ log tổng đài, email, phiếu hỗ trợ), gắn nhãn mỗi câu theo loại thiếu hụt: kiến thức, hành vi, dữ liệu sống. Tỷ lệ các loại thường cho bạn câu trả lời rõ hơn mọi tranh luận.</li>
+<li>Chạy baseline prompt thuần trên bộ đó. Ghi lại câu nào đã đúng — đó là phần RAG không cần cải thiện.</li>
+<li>Với câu hỏi về tài liệu: nếu kho đủ nhỏ, so trực tiếp RAG với ngữ cảnh dài trên cùng bộ câu hỏi, đo cả chất lượng, chi phí mỗi truy vấn và độ trễ p95. Dùng công cụ ước tính trong [[link:van-hanh/chi-phi-do-tre]] để nhân lên theo lưu lượng thực.</li>
+<li>Với câu hỏi về số liệu: kiểm tra xem dữ liệu có nguồn chuẩn (cơ sở dữ liệu, API) không. Nếu có, đừng lập chỉ mục bản sao của nó.</li>
+<li>Tự hỏi: nếu ngày mai một tài liệu phải bị gỡ bỏ vì sai hoặc vì yêu cầu pháp lý, phương án của bạn gỡ nó trong bao lâu?</li>
+</ol>
+</div>
+
+<h2>Đọc tiếp</h2>
+<ul>
+<li>Bài tiếp theo: [[link:nen-tang/kien-truc-tong-quan]] — khi đã chọn RAG, hệ thống gồm những thành phần nào.</li>
+<li>Nếu chưa rõ RAG hoạt động thế nào: [[link:nen-tang/rag-la-gi]].</li>
+<li>Về cách sắp xếp ngữ cảnh và hiện tượng “lạc ở giữa”: [[link:sinh/xay-dung-context]].</li>
+<li>Về truy hồi lặp và agent tự quyết định truy hồi: [[link:nang-cao/agentic-graphrag]].</li>
+<li>Đọc gốc: Ovadia et al. 2023[[cite:ovadia2023]] cho câu hỏi fine-tuning; Li et al. 2024[[cite:li2024selfroute]] và Xu et al. 2023[[cite:xu2023retrievallong]] cho câu hỏi ngữ cảnh dài.</li>
+</ul>

@@ -1,0 +1,74 @@
+---
+{
+  "title": "Sổ tay RAG",
+  "description": "Tài liệu tiếng Việt về Retrieval-Augmented Generation (RAG): lộ trình cho người mới, giải thích cơ chế, so sánh phương án, đánh giá, chẩn đoán lỗi và vận hành trong thực tế, kèm nguồn kiểm chứng.",
+  "layout": "plain",
+  "bodyClass": "wide"
+}
+---
+<div class="home">
+<section class="hero">
+<p class="eyebrow">Sổ tay mở · tiếng Việt · có nguồn kiểm chứng</p>
+<h1>Hiểu RAG từ cơ chế đến vận hành</h1>
+<p class="lead">Retrieval-Augmented Generation (RAG) cho mô hình ngôn ngữ đọc tài liệu của bạn trước khi trả lời. Ý tưởng thì đơn giản, nhưng làm cho tốt thì khó. Sổ tay này giải thích từng mắt xích của hệ thống: vì sao nó tồn tại, nó hoạt động ra sao, nên chọn phương án nào và đo kết quả bằng cách nào.</p>
+<div class="hero-cta">
+<a class="btn" href="lo-trinh/">Bắt đầu theo lộ trình →</a>
+<a class="btn ghost" href="nen-tang/rag-la-gi/">Đọc bài đầu tiên: RAG là gì?</a>
+</div>
+</section>
+
+<div class="paths">
+<section class="path-card">
+<h2>Bạn mới tìm hiểu RAG?</h2>
+<p>Đi theo thứ tự này. Mỗi bước dựa trên bước trước, khoảng 3–4 giờ đọc cho phần cốt lõi.</p>
+<ol>
+<li>[[link:nen-tang/rag-la-gi|RAG là gì và giải quyết vấn đề gì]]</li>
+<li>[[link:nen-tang/khi-nao-dung-rag|Khi nào nên (và không nên) dùng RAG]]</li>
+<li>[[link:nen-tang/kien-truc-tong-quan|Bản đồ kiến trúc một hệ thống RAG]]</li>
+<li>[[link:thuc-hanh/rag-dau-tien|Tự dựng pipeline RAG đầu tiên bằng Python]]</li>
+<li>[[link:danh-gia/do-luong-retrieval|Đo xem hệ thống tìm có đúng không]]</li>
+</ol>
+<p style="margin-top:12px"><a href="lo-trinh/">Xem lộ trình đầy đủ 6 chặng →</a></p>
+</section>
+<section class="path-card">
+<h2>Bạn đang gặp một vấn đề cụ thể?</h2>
+<p>Đi thẳng tới phần cần đọc:</p>
+<ul>
+<li>Câu trả lời sai hoặc bịa → [[link:danh-gia/chan-doan-loi|Chẩn đoán lỗi theo từng tầng]]</li>
+<li>Tìm trượt mã sản phẩm, tên riêng, số hiệu văn bản → [[link:tim-kiem/hybrid-search|Hybrid search & BM25]]</li>
+<li>Kết quả đúng nhưng xếp hạng thấp → [[link:tim-kiem/reranking|Reranking]]</li>
+<li>Không biết chunk dài bao nhiêu → [[link:du-lieu/chunking|Chunking]]</li>
+<li>Trích dẫn không khớp với nội dung → [[link:sinh/trich-dan-grounding|Grounding & trích dẫn]]</li>
+<li>Chậm hoặc tốn kém → [[link:van-hanh/chi-phi-do-tre|Chi phí & độ trễ]]</li>
+<li>Lo rò rỉ dữ liệu, prompt injection → [[link:van-hanh/bao-mat|Bảo mật & phân quyền]]</li>
+</ul>
+</section>
+</div>
+
+<h2 class="h" id="ban-do-noi-dung">Bản đồ nội dung</h2>
+<p class="sub">Chín phần, sắp theo đúng thứ tự dữ liệu chảy qua một hệ thống RAG: từ tài liệu thô tới câu trả lời có trích dẫn, rồi tới đánh giá và vận hành.</p>
+[[sections]]
+
+<div class="paths">
+<section class="path-card">
+<h2>Cách đọc sổ tay này</h2>
+<p>Mỗi bài đi từ vấn đề → cơ chế → ví dụ → đánh đổi → lỗi thường gặp → cách kiểm chứng → nguồn. Các khung màu cho biết loại thông tin bạn đang đọc:</p>
+<ul>
+<li><span class="kind-tag k-nen-tang">Nền tảng</span> kiến thức ổn định, định nghĩa</li>
+<li><span class="kind-tag k-nghien-cuu">Kết quả nghiên cứu</span> nêu kèm điều kiện thí nghiệm, đừng coi là quy luật chung</li>
+<li><span class="kind-tag k-kinh-nghiem">Kinh nghiệm triển khai</span> thực hành phổ biến, cần đo lại trên dữ liệu của bạn</li>
+<li><span class="kind-tag k-nhan-dinh">Nhận định biên soạn</span> quan điểm của người viết</li>
+</ul>
+</section>
+<section class="path-card">
+<h2>Công cụ tra cứu</h2>
+<ul>
+<li>[[link:tra-cuu/thuat-ngu|Bảng thuật ngữ]]: định nghĩa ngắn kèm liên kết tới bài giải thích</li>
+<li>[[link:tra-cuu/nguon-tham-khao|Thư mục nguồn]]: bài báo, benchmark, tài liệu chính thức, kèm ghi chú nên đọc để làm gì</li>
+<li>Tìm kiếm toàn trang: bấm <kbd>/</kbd> hoặc nút <em>Tìm kiếm</em> ở trên cùng</li>
+<li>Công cụ tương tác: [[link:du-lieu/chunking|cắt chunk]], [[link:tim-kiem/hybrid-search|hợp nhất RRF]], [[link:danh-gia/do-luong-retrieval|tính Recall/MRR/nDCG]], [[link:van-hanh/chi-phi-do-tre|ước tính chi phí]]</li>
+</ul>
+<p style="margin-top:12px">Nội dung được rà soát lần cuối ngày 22/10/2026. Xem [[link:gioi-thieu|phương pháp biên soạn]].</p>
+</section>
+</div>
+</div>

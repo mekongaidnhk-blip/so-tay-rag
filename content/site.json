@@ -1,0 +1,21 @@
+{
+  "name": "Sổ tay RAG",
+  "tagline": "Hiểu, chọn và vận hành Retrieval-Augmented Generation",
+  "description": "Tài liệu tiếng Việt về Retrieval-Augmented Generation (RAG): lộ trình cho người mới, giải thích cơ chế, so sánh phương án, đánh giá, chẩn đoán lỗi và vận hành trong thực tế, kèm nguồn kiểm chứng.",
+  "url": "https://mekongaidnhk-blip.github.io/so-tay-rag/",
+  "basePath": "/so-tay-rag/",
+  "repo": "https://github.com/mekongaidnhk-blip/so-tay-rag",
+  "updated": "2026-10-22",
+  "version": "1",
+  "sourceGroups": [
+    "Bài báo nền tảng",
+    "Retrieval và biểu diễn",
+    "Xử lý truy vấn và reranking",
+    "Context, generation và trích dẫn",
+    "Đánh giá và benchmark",
+    "Bảo mật",
+    "Hướng nâng cao",
+    "Tài liệu chính thức và mã nguồn",
+    "Khảo sát và tổng quan"
+  ]
+}

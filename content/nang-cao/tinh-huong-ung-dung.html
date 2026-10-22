@@ -1,0 +1,176 @@
+---
+{
+  "title": "Tình huống ứng dụng: mỗi bài toán RAG đòi hỏi gì khác nhau?",
+  "navTitle": "Tình huống ứng dụng",
+  "description": "Phân tích sáu tình huống RAG điển hình: hỗ trợ khách hàng, kho tri thức nội bộ, văn bản pháp luật Việt Nam, tài liệu kỹ thuật, lĩnh vực rủi ro cao (y tế, tài chính) và hỏi đáp sản phẩm thương mại điện tử. Với mỗi tình huống: đặc điểm dữ liệu và câu hỏi, lựa chọn thiết kế, rủi ro và cách đánh giá.",
+  "lead": "Không có một cấu hình RAG “tốt nhất” cho mọi bài toán. Bot trả lời chính sách đổi trả, công cụ tra cứu văn bản pháp luật và trợ lý đọc tài liệu API khác nhau ở dữ liệu, cách người dùng hỏi, loại sai lầm nguy hiểm nhất và cách đo chất lượng. Bài này dùng một khung phân tích chung cho sáu tình huống, để bạn nhận ra bài toán của mình gần với tình huống nào và cần ưu tiên gì.",
+  "level": "Trung cấp",
+  "reviewed": "2026-10-22",
+  "kinds": ["nen-tang", "nghien-cuu", "kinh-nghiem", "nhan-dinh"]
+}
+---
+<div class="callout tom-tat">
+<ul>
+<li>Phân tích mọi bài toán RAG qua bốn câu hỏi: <strong>dữ liệu trông thế nào, người dùng hỏi ra sao, sai lầm nào nguy hiểm nhất, và đo bằng gì</strong>.</li>
+<li><strong>Hỗ trợ khách hàng</strong>: câu hỏi ngắn, khẩu ngữ, lặp lại nhiều. Rủi ro lớn nhất là cam kết sai chính sách. <strong>Kho tri thức nội bộ</strong>: nguồn phân tán, phiên bản cũ và phân quyền là vấn đề chính.</li>
+<li><strong>Văn bản pháp luật</strong>: cấu trúc Điều/Khoản/Điểm và <em>tình trạng hiệu lực theo thời gian</em> quyết định đúng sai. Ngay các công cụ pháp lý thương mại có RAG cũng vẫn ảo giác ở tỷ lệ đáng kể.</li>
+<li><strong>Tài liệu kỹ thuật</strong>: phiên bản và định danh chính xác (tên hàm, mã lỗi), nên BM25 và metadata phiên bản quan trọng ngang embedding.</li>
+<li><strong>Y tế, tài chính</strong>: luôn có người duyệt, nguồn có thẩm quyền, và đánh giá theo <em>mức độ nghiêm trọng</em> của lỗi chứ không chỉ tỷ lệ đúng. <strong>Thương mại điện tử</strong>: tách dữ liệu có cấu trúc (giá, tồn kho) sang truy vấn cơ sở dữ liệu; RAG chỉ dùng cho mô tả và đánh giá.</li>
+</ul>
+</div>
+
+<div class="callout nhan-dinh">
+<p><strong>Cách đọc bài này.</strong> Các nhận định có trích dẫn đến từ nghiên cứu hoặc case study đã công bố. Các mục “Lựa chọn thiết kế” là <em>khuyến nghị của người biên soạn</em>, tổng hợp từ các bài khác trong sổ tay và từ thực hành phổ biến. Chúng là điểm khởi đầu cần kiểm chứng bằng bộ đánh giá của bạn, không phải kết quả thực nghiệm.</p>
+</div>
+
+<h2>Khung phân tích chung</h2>
+<p>Trước khi chọn mô hình embedding hay vector database, hãy trả lời bốn câu hỏi. Câu trả lời sẽ quyết định phần lớn kiến trúc ([[link:nen-tang/kien-truc-tong-quan]]):</p>
+<ol class="steps">
+<li><strong>Dữ liệu</strong>: định dạng (PDF, HTML, bảng, ảnh scan, cơ sở dữ liệu), kích thước, tần suất thay đổi, có phiên bản và hiệu lực theo thời gian không, có phân quyền không.</li>
+<li><strong>Câu hỏi</strong>: ngắn hay dài, khẩu ngữ hay chuyên môn, có mã hoặc định danh chính xác không, tra cứu hay tổng hợp, có lặp lại nhiều không.</li>
+<li><strong>Sai lầm nguy hiểm nhất</strong>: trả lời sai, trả lời thiếu, lộ thông tin, hay dùng văn bản đã hết hiệu lực? Hậu quả là người dùng bực mình, mất tiền, hay vi phạm pháp luật?</li>
+<li><strong>Đo bằng gì</strong>: chỉ số truy hồi ([[link:danh-gia/do-luong-retrieval]]), chất lượng câu trả lời ([[link:danh-gia/danh-gia-generation]]), và chỉ số nghiệp vụ thực sự phản ánh giá trị.</li>
+</ol>
+
+<table>
+<thead><tr><th>Tình huống</th><th>Dữ liệu đặc trưng</th><th>Câu hỏi đặc trưng</th><th>Sai lầm nguy hiểm nhất</th></tr></thead>
+<tbody>
+<tr><td>Hỗ trợ khách hàng</td><td>Chính sách, FAQ, lịch sử phiếu hỗ trợ</td><td>Ngắn, khẩu ngữ, không dấu, lặp lại</td><td>Cam kết sai chính sách với khách</td></tr>
+<tr><td>Kho tri thức nội bộ</td><td>Wiki, tài liệu, chat; nhiều nguồn, nhiều phiên bản</td><td>Đa dạng, nhiều từ viết tắt nội bộ</td><td>Lộ tài liệu không có quyền; dùng bản cũ</td></tr>
+<tr><td>Văn bản pháp luật</td><td>Luật, nghị định, thông tư có cấu trúc chặt và sửa đổi chồng chéo</td><td>Theo tình huống, phụ thuộc thời điểm</td><td>Dẫn văn bản hết hiệu lực; bịa điều khoản</td></tr>
+<tr><td>Tài liệu kỹ thuật, mã nguồn</td><td>Tài liệu API, hướng dẫn, mã, issue</td><td>Có tên hàm, mã lỗi, phiên bản</td><td>Trộn phiên bản; mã không chạy</td></tr>
+<tr><td>Y tế, tài chính</td><td>Hướng dẫn chuyên môn, quy định, biểu phí</td><td>Chuyên môn, có số liệu</td><td>Sai số liệu hoặc khuyến nghị gây hại</td></tr>
+<tr><td>Hỏi đáp sản phẩm TMĐT</td><td>Thuộc tính có cấu trúc + mô tả + đánh giá</td><td>So sánh, lọc theo thuộc tính, giá</td><td>Sai giá, tồn kho, thông số</td></tr>
+</tbody></table>
+
+<h2>1. Hỗ trợ khách hàng dựa trên chính sách và FAQ</h2>
+<p><strong>Đặc điểm.</strong> Câu hỏi ngắn, khẩu ngữ, nhiều khi không dấu hoặc viết tắt: <em>“hang giam gia doi dc ko”</em>, <em>“đơn COD hoàn tiền về đâu”</em>. Một phần nhỏ chủ đề chiếm phần lớn lưu lượng. Nguồn trả lời gồm văn bản chính sách (thay đổi theo đợt), FAQ, và lịch sử phiếu hỗ trợ (giàu thông tin thực tế nhưng nhiễu và có thể chứa dữ liệu cá nhân).</p>
+<div class="callout nghien-cuu">
+<p><strong>Case study LinkedIn.</strong> Xu và cộng sự (2024) nhận xét rằng RAG thông thường coi phiếu hỗ trợ cũ như văn bản phẳng, bỏ qua cấu trúc bên trong mỗi phiếu và quan hệ giữa các phiếu. Họ dựng đồ thị tri thức từ lịch sử phiếu, rồi khi có câu hỏi thì phân tích câu hỏi và truy hồi các đồ thị con liên quan. Trên bộ đánh giá của nhóm, phương pháp vượt baseline 77,6% về MRR. Sau khoảng sáu tháng đội chăm sóc khách hàng của LinkedIn sử dụng, thời gian giải quyết trung vị cho mỗi phiếu giảm 28,6%[[cite:xu2024linkedin]]. Lưu ý điều kiện: đây là kết quả trên dữ liệu và quy trình nội bộ của một công ty, và hệ thống hỗ trợ <em>nhân viên</em> chăm sóc khách hàng chứ không trả lời trực tiếp cho khách.</p>
+</div>
+<p><strong>Lựa chọn thiết kế</strong> (khuyến nghị):</p>
+<ul>
+<li><strong>Hybrid search</strong> để xử lý câu không dấu, mã đơn hàng, tên chương trình khuyến mãi ([[link:tim-kiem/hybrid-search]]). Chuẩn hóa dấu tiếng Việt cho chỉ mục từ khóa.</li>
+<li><strong>Metadata hiệu lực cho chính sách</strong>: ngày bắt đầu và kết thúc áp dụng, phạm vi (khu vực, loại khách hàng). Chương trình khuyến mãi tháng trước không được trả lời như chương trình hiện hành.</li>
+<li><strong>Ưu tiên nguồn chính thức</strong>: văn bản chính sách đứng trên phiếu hỗ trợ cũ khi mâu thuẫn. Phiếu cũ có thể phản ánh một ngoại lệ đã được duyệt cho riêng khách đó.</li>
+<li><strong>Biết khi nào chuyển cho người</strong>: khi điểm truy hồi thấp, khi câu hỏi liên quan đến khiếu nại hoặc bồi thường, khi khách hỏi lại lần thứ hai.</li>
+<li><strong>FAQ đã duyệt cho câu hỏi thường gặp</strong> thay vì cache ngữ nghĩa tự do. Xem cảnh báo về cache ở [[link:van-hanh/chi-phi-do-tre]].</li>
+</ul>
+<p><strong>Rủi ro chính.</strong> Bot “hứa” hoàn tiền hoặc ưu đãi không có trong chính sách. Tài liệu do nhà bán hàng hay đối tác tải lên chứa chỉ thị độc hại ([[link:van-hanh/bao-mat]]). Dữ liệu cá nhân trong phiếu cũ lọt vào câu trả lời cho khách khác.</p>
+<p><strong>Đánh giá.</strong> Tỷ lệ “tự giải quyết” (deflection) <em>không</em> phải là chỉ số chất lượng: khách bỏ đi vì chán cũng được tính là “tự giải quyết”. Hãy xây bộ kiểm thử từ phiếu thật đã có đáp án đúng, đo độ chính xác theo chính sách, và theo dõi tỷ lệ khách liên hệ lại về cùng vấn đề trong vài ngày sau.</p>
+
+<h2>2. Kho tri thức nội bộ và tìm kiếm doanh nghiệp</h2>
+<p><strong>Đặc điểm.</strong> Dữ liệu phân tán ở nhiều hệ thống (wiki, ổ đĩa chung, hệ thống quản lý tài liệu, kênh chat), mỗi hệ thống có mô hình phân quyền riêng. Rất nhiều bản trùng hoặc gần trùng: “Quy trình mua sắm v3”, “Quy trình mua sắm v3 (sửa)”, “Quy trình mua sắm 2024 – FINAL”. Người dùng dùng từ viết tắt và biệt ngữ nội bộ (“làm PR qua cổng E-Proc”).</p>
+<div class="callout nghien-cuu">
+<p>Barnett và cộng sự rút kinh nghiệm từ ba case study RAG thực tế (nghiên cứu, giáo dục và y sinh) và liệt kê bảy điểm lỗi, trong đó có: nội dung không có trong kho, tài liệu đúng không lọt vào top-k, tài liệu bị loại khi ghép ngữ cảnh, sai định dạng và câu trả lời không đầy đủ. Một kết luận của họ là việc kiểm chứng hệ thống RAG chỉ thực sự khả thi khi vận hành, và độ vững của hệ thống được hoàn thiện dần chứ không thiết kế sẵn được ngay từ đầu[[cite:barnett2024]].</p>
+</div>
+<p><strong>Lựa chọn thiết kế</strong> (khuyến nghị):</p>
+<ul>
+<li><strong>Connector đồng bộ cả nội dung lẫn quyền</strong>, và lọc theo quyền ở tầng truy hồi ([[link:van-hanh/bao-mat]]). Đây là yêu cầu bắt buộc, không phải tính năng bổ sung.</li>
+<li><strong>Khử trùng lặp và đánh dấu bản mới nhất</strong> khi thu thập ([[link:du-lieu/thu-thap-lam-sach]]). Metadata cần có ngày sửa cuối, người sở hữu tài liệu và trạng thái (nháp, đã ban hành, đã thay thế).</li>
+<li><strong>Bảng từ viết tắt nội bộ</strong> để mở rộng truy vấn ([[link:tim-kiem/xu-ly-truy-van]]). Mô hình embedding chung không biết “E-Proc” là gì.</li>
+<li><strong>Hiển thị nguồn và ngày cập nhật</strong> cạnh câu trả lời, để người đọc tự đánh giá độ mới.</li>
+</ul>
+<p><strong>Rủi ro chính.</strong> Lộ tài liệu do quyền ở hệ thống nguồn cấu hình sai (ví dụ thư mục “chia sẻ cho mọi người trong tổ chức” bị quên). Đây là lỗi có sẵn, nhưng trước khi có RAG ít ai tìm thấy, còn RAG khiến nó dễ bị tìm ra. Ngoài ra là trả lời theo quy trình đã bị thay thế.</p>
+<p><strong>Đánh giá.</strong> Recall theo từng nguồn dữ liệu, vì nguồn trích xuất kém sẽ âm thầm vắng mặt trong kết quả. Thêm bộ kiểm thử phân quyền tự động, và tỷ lệ câu trả lời dẫn tài liệu ở trạng thái “đã thay thế”.</p>
+
+<h2>3. Văn bản pháp luật và quy định</h2>
+<h3>Cấu trúc văn bản pháp luật Việt Nam</h3>
+<div class="callout nen-tang">
+<p>Văn bản quy phạm pháp luật Việt Nam có <strong>thứ bậc</strong>: Hiến pháp, rồi Bộ luật và Luật do Quốc hội ban hành, rồi các văn bản quy định chi tiết và hướng dẫn thi hành như Nghị định của Chính phủ và Thông tư của Bộ trưởng. Bên trong một văn bản, nội dung chia theo <strong>Chương, Mục, Điều, Khoản, Điểm</strong>. Điều được đánh số liên tục (Điều 1, Điều 2…), Khoản đánh số trong Điều (1, 2, 3…), Điểm đánh chữ cái trong Khoản (a, b, c…). Mỗi văn bản có số hiệu, ngày ban hành, ngày có hiệu lực, và có thể bị sửa đổi, bổ sung, thay thế hoặc bãi bỏ một phần hay toàn bộ bởi văn bản khác. Chi tiết về hệ thống văn bản do Luật Ban hành văn bản quy phạm pháp luật hiện hành quy định; hãy đối chiếu bản đang có hiệu lực.</p>
+</div>
+<p>Cấu trúc này vừa là lợi thế vừa là bẫy cho RAG. Lợi thế: Điều là đơn vị ngữ nghĩa tự nhiên để chunking, và trích dẫn tới “Điểm b Khoản 2 Điều 5” kiểm chứng được chính xác. Bẫy: một Điều thường chỉ có nghĩa đầy đủ khi đọc cùng định nghĩa ở Điều 2, ngoại lệ ở Điều khác, hoặc văn bản hướng dẫn ở cấp thấp hơn. Ngoài ra, <strong>đúng hay sai phụ thuộc vào thời điểm</strong>.</p>
+
+<h3>Ví dụ về tính thời điểm</h3>
+<p>Một doanh nghiệp hỏi về nghĩa vụ bảo vệ dữ liệu cá nhân. Luật Bảo vệ dữ liệu cá nhân được Quốc hội thông qua ngày 26/6/2025 và có hiệu lực từ 1/1/2026. Theo thông tin chính thức, luật cho doanh nghiệp nhỏ và khởi nghiệp quyền lựa chọn có thực hiện đánh giá tác động và chỉ định nhân sự bảo vệ dữ liệu hay không trong 5 năm, và miễn các yêu cầu này cho hộ kinh doanh và doanh nghiệp siêu nhỏ[[cite:baochinhphu2025luat]]. Ngày 31/12/2025, Chính phủ ban hành Nghị định 356/2025/NĐ-CP quy định chi tiết luật này[[cite:baochinhphu2025nd356]]. Cùng một câu hỏi, đáp án cho tình huống xảy ra năm 2025 phải dựa trên quy định áp dụng lúc đó, còn tình huống năm 2026 dựa trên luật mới. Một hệ thống RAG không có metadata hiệu lực có thể trộn cả hai mà không ai nhận ra.</p>
+
+<p><strong>Lựa chọn thiết kế</strong> (khuyến nghị):</p>
+<ul>
+<li><strong>Chunk theo Điều</strong> (hoặc Khoản nếu Điều quá dài). Mỗi chunk mang <em>đường dẫn đầy đủ</em>: tên văn bản, số hiệu, Chương, Điều, tiêu đề Điều. Chunk “2. Trường hợp quy định tại khoản 1…” mà thiếu ngữ cảnh này thì vô nghĩa ([[link:du-lieu/chunking]]).</li>
+<li><strong>Metadata bắt buộc</strong>: loại văn bản, số hiệu, cơ quan ban hành, ngày ban hành, ngày có hiệu lực, tình trạng hiệu lực (còn hiệu lực, hết hiệu lực một phần, hết hiệu lực toàn bộ), văn bản sửa đổi hoặc thay thế, và quan hệ “hướng dẫn” giữa các văn bản ([[link:du-lieu/metadata-va-bieu-dien]]).</li>
+<li><strong>Ưu tiên văn bản hợp nhất</strong> khi có, và lọc theo thời điểm áp dụng mà người hỏi nêu (hoặc mặc định là hiện tại và nói rõ điều đó).</li>
+<li><strong>BM25 cho số hiệu</strong>: “Nghị định 356/2025/NĐ-CP” phải khớp chính xác. Embedding không phân biệt tốt các số hiệu gần nhau.</li>
+<li><strong>Truy hồi theo quan hệ</strong>: khi lấy một Điều của luật, cân nhắc lấy kèm Điều định nghĩa và các Điều tương ứng ở nghị định hướng dẫn. Đây là chỗ đồ thị quan hệ giữa văn bản có ích ([[link:nang-cao/agentic-graphrag]]).</li>
+<li><strong>Trích dẫn tới cấp Điểm/Khoản</strong> kèm ngày hiệu lực, và tuyên bố rõ đây là thông tin tham khảo, không phải tư vấn pháp lý.</li>
+</ul>
+<div class="callout nghien-cuu">
+<p><strong>Ngay cả công cụ thương mại cũng ảo giác.</strong> Magesh và cộng sự (Stanford, 2024) đánh giá theo đề cương đăng ký trước (preregistered) các công cụ nghiên cứu pháp lý dùng RAG của LexisNexis và Thomson Reuters, những công cụ từng được quảng bá là giảm mạnh hoặc “không có” ảo giác. Kết quả: Lexis+ AI, Westlaw AI-Assisted Research và Ask Practical Law AI đều ảo giác trong khoảng 17% đến 33% số trường hợp. Tỷ lệ này thấp hơn GPT-4 dùng chung nhưng vẫn đáng kể, và các hệ thống khác nhau nhiều về mức độ trả lời và độ chính xác[[cite:magesh2024]]. Điều kiện: đây là pháp luật Hoa Kỳ, các phiên bản công cụ năm 2024, và bộ câu hỏi do nhóm tác giả thiết kế. Bài học chung vẫn áp dụng: RAG giảm chứ không loại bỏ ảo giác trong lĩnh vực pháp lý.</p>
+</div>
+<p><strong>Đánh giá.</strong> Độ chính xác trích dẫn ở cấp Điều, Khoản, Điểm (trích dẫn có tồn tại không, có nói đúng điều được gán cho nó không); tỷ lệ dẫn văn bản hết hiệu lực; và bộ câu hỏi theo thời điểm (cùng câu hỏi, hai mốc thời gian, hai đáp án). Câu trả lời mẫu nên do người có chuyên môn pháp lý soạn hoặc duyệt.</p>
+
+<h2>4. Tài liệu kỹ thuật và mã nguồn</h2>
+<p><strong>Đặc điểm.</strong> Câu hỏi chứa định danh chính xác: tên hàm, tham số, mã lỗi (“lỗi <code>ECONNRESET</code> khi gọi <code>client.upload()</code>”). Tài liệu có nhiều phiên bản song song (v1 và v2 của API). Khối mã không được cắt ngang. Nguồn trả lời gồm tài liệu chính thức, mã nguồn, issue và thảo luận, với độ tin cậy rất khác nhau.</p>
+<p><strong>Lựa chọn thiết kế</strong> (khuyến nghị):</p>
+<ul>
+<li><strong>BM25 là bắt buộc</strong>, không phải tùy chọn. Định danh như <code>max_retries</code> hay mã lỗi là nơi tìm kiếm từ khóa vượt embedding ([[link:tim-kiem/hybrid-search]]). Bộ tách từ không được tách <code>snake_case</code> hay dấu chấm theo cách làm mất định danh.</li>
+<li><strong>Metadata phiên bản</strong> trên mọi chunk, và lọc theo phiên bản người dùng đang dùng (hỏi lại nếu không rõ). Trộn ví dụ v1 với tham số v2 là lỗi điển hình.</li>
+<li><strong>Chunking theo cấu trúc</strong>: theo tiêu đề tài liệu; với mã thì theo hàm hoặc lớp; không cắt giữa khối mã ([[link:du-lieu/chunking]]).</li>
+<li><strong>Phân tầng nguồn</strong>: tài liệu chính thức đứng trên issue và thảo luận. Ghi rõ khi câu trả lời dựa trên issue (“một người dùng báo cáo…”).</li>
+</ul>
+<p><strong>Rủi ro chính.</strong> Mã trông hợp lý nhưng dùng API không tồn tại hoặc đã bị bỏ. Hướng dẫn cho phiên bản cũ được trình bày như hướng dẫn hiện hành.</p>
+<p><strong>Đánh giá.</strong> Lợi thế lớn của lĩnh vực này là <em>chạy được</em>: với câu hỏi “làm thế nào”, có thể tự động kiểm tra đoạn mã sinh ra có biên dịch hoặc chạy được trong môi trường đúng phiên bản không. Thêm vào đó là bộ câu hỏi theo từng phiên bản, và tỷ lệ câu trả lời trích đúng phiên bản tài liệu.</p>
+
+<h2>5. Lĩnh vực rủi ro cao: y tế và tài chính</h2>
+<p><strong>Đặc điểm.</strong> Sai lầm có thể gây hại cho sức khỏe hoặc tài chính của người dùng. Thông tin có số liệu chính xác (liều lượng, lãi suất, biểu phí), thay đổi theo thời gian, và chịu quy định chặt. Câu hỏi cần chuyên môn để hiểu đúng.</p>
+<div class="callout nghien-cuu">
+<p><strong>Benchmark y khoa MIRAGE.</strong> Xiong và cộng sự (2024) xây benchmark MIRAGE gồm 7.663 câu hỏi từ năm bộ dữ liệu QA y khoa. Họ chạy hơn 1,8 nghìn tỷ token prompt trên 41 tổ hợp kho tài liệu, bộ truy hồi và LLM bằng bộ công cụ MedRAG. Kết quả: RAG nâng độ chính xác của sáu LLM tới 18% so với prompt chain-of-thought; kết hợp nhiều kho y khoa với nhiều bộ truy hồi cho kết quả tốt nhất. Họ cũng quan sát hiện tượng “lost-in-the-middle” trong RAG y khoa[[cite:xiong2024medrag]]. Điều kiện quan trọng: MIRAGE gồm câu hỏi dạng trắc nghiệm hoặc có đáp án ngắn. Điểm cao trên benchmark này không có nghĩa là an toàn khi tư vấn lâm sàng thực tế.</p>
+</div>
+<p><strong>Lựa chọn thiết kế</strong> (khuyến nghị):</p>
+<ul>
+<li><strong>Con người trong vòng lặp</strong> (human-in-the-loop): hệ thống hỗ trợ chuyên gia (bác sĩ, chuyên viên tín dụng) thay vì trả lời thẳng cho người dân, ít nhất cho tới khi có bằng chứng đủ mạnh. Ghi lại ai đã duyệt câu trả lời nào.</li>
+<li><strong>Chỉ dùng nguồn có thẩm quyền</strong>: hướng dẫn chuyên môn được ban hành chính thức, biểu phí và lãi suất từ hệ thống nguồn. Không dùng diễn đàn hay web không kiểm soát.</li>
+<li><strong>Số liệu thay đổi hằng ngày đi qua API</strong>, không qua chỉ mục văn bản. Lãi suất tiết kiệm hôm nay nên lấy từ hệ thống lõi qua gọi công cụ, kèm thời điểm cập nhật. Phép tính (lãi, phí, liều theo cân nặng) dùng công cụ tính toán, không để LLM tự tính.</li>
+<li><strong>Từ chối có kiểm soát</strong>: ngưỡng tin cậy cao hơn các tình huống khác để nói “không đủ thông tin” và chuyển cho chuyên gia. Xem cách thiết kế ở [[link:sinh/trich-dan-grounding]].</li>
+<li><strong>Bảo vệ dữ liệu nhạy cảm</strong>: hồ sơ bệnh án và thông tin tài chính cá nhân cần biện pháp bảo vệ cao hơn, kể cả với embedding và log ([[link:van-hanh/bao-mat]]).</li>
+</ul>
+<p><strong>Đánh giá.</strong> Phân loại lỗi theo <em>mức độ nghiêm trọng</em> (vô hại, gây hiểu nhầm, có thể gây hại), không chỉ đúng hay sai: một hệ thống đúng 95% nhưng 1% lỗi có thể gây hại có thể tệ hơn hệ thống đúng 90% mà không có lỗi nào loại đó. Câu trả lời mẫu và việc chấm điểm cần chuyên gia trong lĩnh vực; LLM-as-a-judge chỉ là công cụ sàng lọc. Kiểm tra riêng mọi con số trong câu trả lời so với nguồn.</p>
+
+<h2>6. Hỏi đáp sản phẩm trong thương mại điện tử</h2>
+<p><strong>Đặc điểm.</strong> Dữ liệu trộn hai loại. <em>Có cấu trúc</em>: giá, tồn kho, thông số (dung lượng pin, kích thước, màu), danh mục, thương hiệu. <em>Phi cấu trúc</em>: mô tả sản phẩm, đánh giá của khách, hỏi đáp của người mua. Câu hỏi thường là lọc và so sánh: <em>“điện thoại dưới 7 triệu pin trên 5000mAh”</em>, <em>“máy này với máy kia cái nào chụp đêm tốt hơn”</em>, <em>“áo này mặc có bị xù không”</em>.</p>
+<p><strong>Lựa chọn thiết kế</strong> (khuyến nghị):</p>
+<ul>
+<li><strong>Định tuyến theo loại câu hỏi</strong>: câu hỏi lọc theo thuộc tính chuyển thành truy vấn có cấu trúc (bộ lọc trên cơ sở dữ liệu sản phẩm, hoặc text-to-SQL có kiểm soát). Câu hỏi về trải nghiệm thì dùng RAG trên đánh giá và mô tả. Như bài [[link:nen-tang/rag-la-gi]] đã nêu, tìm văn bản không phải công cụ tốt cho dữ liệu có cấu trúc.</li>
+<li><strong>Không lập chỉ mục giá và tồn kho vào văn bản</strong>. Hãy lấy chúng tại thời điểm trả lời, nếu không bot sẽ báo giá của tuần trước.</li>
+<li><strong>Chuẩn hóa đơn vị và biến thể</strong> (“5.000 mAh”, “5000mah”, “5k mAh”) ở cả dữ liệu lẫn truy vấn.</li>
+<li><strong>Đánh giá của khách là nguồn không tin cậy</strong>: có thể có spam, đánh giá giả, hoặc chỉ thị prompt injection ([[link:van-hanh/bao-mat]]). Tổng hợp nhiều đánh giá (“khoảng 30% đánh giá nhắc tới pin yếu”) thay vì trích một đánh giá như sự thật.</li>
+<li><strong>Metadata danh mục và thương hiệu</strong> để lọc trước khi tìm kiếm ngữ nghĩa, tránh trả ốp lưng khi người dùng hỏi điện thoại.</li>
+</ul>
+<p><strong>Rủi ro chính.</strong> Sai giá, sai tồn kho, sai thông số kỹ thuật, có thể dẫn tới tranh chấp. Bot thiên vị sản phẩm do nội dung bị thao túng. So sánh dựa trên mô tả quảng cáo thay vì thông số.</p>
+<p><strong>Đánh giá.</strong> Độ chính xác thuộc tính: mọi giá trị trong câu trả lời đối chiếu tự động với cơ sở dữ liệu sản phẩm. Thêm vào đó là độ chính xác của bộ định tuyến, và recall của truy vấn lọc. Tỷ lệ chuyển đổi chịu ảnh hưởng của quá nhiều yếu tố để dùng làm chỉ số chất lượng trả lời.</p>
+
+<h2>Tổng hợp: lựa chọn ưu tiên theo tình huống</h2>
+<table>
+<thead><tr><th>Tình huống</th><th>Ưu tiên thiết kế số 1</th><th>Metadata không thể thiếu</th><th>Chỉ số nên theo dõi</th></tr></thead>
+<tbody>
+<tr><td>Hỗ trợ khách hàng</td><td>Hybrid search + chuyển cho người đúng lúc</td><td>Hiệu lực chính sách, phạm vi áp dụng</td><td>Độ chính xác theo chính sách; tỷ lệ liên hệ lại</td></tr>
+<tr><td>Kho tri thức nội bộ</td><td>Phân quyền tại truy hồi + khử trùng lặp</td><td>Quyền, trạng thái, ngày sửa, người sở hữu</td><td>Recall theo nguồn; kiểm thử ACL</td></tr>
+<tr><td>Văn bản pháp luật</td><td>Chunk theo Điều + lọc theo hiệu lực</td><td>Số hiệu, ngày hiệu lực, tình trạng, quan hệ sửa đổi</td><td>Độ chính xác trích dẫn; tỷ lệ dẫn văn bản hết hiệu lực</td></tr>
+<tr><td>Tài liệu kỹ thuật</td><td>BM25 cho định danh + lọc phiên bản</td><td>Phiên bản, loại nguồn</td><td>Tỷ lệ mã chạy được; đúng phiên bản</td></tr>
+<tr><td>Y tế, tài chính</td><td>Người duyệt + nguồn có thẩm quyền + công cụ tính</td><td>Nguồn, ngày ban hành, mức độ thẩm quyền</td><td>Lỗi theo mức nghiêm trọng; độ chính xác số liệu</td></tr>
+<tr><td>Thương mại điện tử</td><td>Định tuyến sang truy vấn có cấu trúc</td><td>Danh mục, thương hiệu, thuộc tính chuẩn hóa</td><td>Độ chính xác thuộc tính so với cơ sở dữ liệu</td></tr>
+</tbody></table>
+
+<div class="callout kinh-nghiem">
+<p><strong>Những điểm chung</strong> xuất hiện ở cả sáu tình huống, và theo kinh nghiệm thường quyết định thành bại nhiều hơn việc chọn mô hình: (1) metadata về <em>thời gian và hiệu lực</em>; (2) <em>phân tầng độ tin cậy</em> của nguồn; (3) biết <em>khi nào không trả lời</em> và chuyển cho người; (4) bộ đánh giá xây từ <em>câu hỏi thật</em> của người dùng thật. Đây là quy tắc kinh nghiệm, không phải kết quả đo có kiểm soát.</p>
+</div>
+
+<h2>Tự kiểm tra</h2>
+<div class="callout kiem-chung">
+<ol>
+<li>Bài toán của bạn gần nhất với tình huống nào trong bảng? Có đặc điểm nào thuộc tình huống khác không? Ví dụ, bot hỗ trợ khách hàng của ngân hàng vừa là “hỗ trợ khách hàng” vừa là “tài chính rủi ro cao”.</li>
+<li>Viết ra sai lầm nguy hiểm nhất của hệ thống bạn. Bộ đánh giá hiện tại có câu hỏi nào kiểm tra đúng sai lầm đó không?</li>
+<li>Dữ liệu của bạn có thay đổi theo thời gian không? Nếu có, chunk đã có metadata ngày hiệu lực chưa, và có câu hỏi kiểm thử nào mà đáp án phụ thuộc thời điểm không?</li>
+<li>Có loại câu hỏi nào nên chuyển sang truy vấn cơ sở dữ liệu hoặc gọi API thay vì RAG không?</li>
+<li>Lấy 20 câu hỏi thật, chấm theo thang mức độ nghiêm trọng (vô hại, gây hiểu nhầm, có thể gây hại) thay vì đúng/sai. Bức tranh có khác không?</li>
+</ol>
+</div>
+
+<h2>Đọc tiếp</h2>
+<ul>
+<li>Bắt tay xây dựng: [[link:thuc-hanh/rag-dau-tien]], rồi rà soát bằng [[link:thuc-hanh/checklist-trien-khai]].</li>
+<li>Khi tình huống cần nhiều bước truy hồi hoặc câu hỏi toàn cục: [[link:nang-cao/agentic-graphrag]].</li>
+<li>Thiết kế metadata hiệu lực và độ tin cậy: [[link:du-lieu/metadata-va-bieu-dien]].</li>
+<li>Phân quyền và rủi ro của nội dung không tin cậy: [[link:van-hanh/bao-mat]].</li>
+<li>Khi nào không nên dùng RAG mà dùng truy vấn có cấu trúc hoặc fine-tuning: [[link:nen-tang/khi-nao-dung-rag]].</li>
+<li>Case study nên đọc: Seven Failure Points[[cite:barnett2024]], LinkedIn[[cite:xu2024linkedin]], đánh giá công cụ pháp lý[[cite:magesh2024]], MedRAG[[cite:xiong2024medrag]].</li>
+</ul>

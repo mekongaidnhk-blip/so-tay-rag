@@ -1,0 +1,201 @@
+---
+{
+  "title": "Hybrid search: vì sao BM25 vẫn quan trọng khi đã có embedding?",
+  "navTitle": "Hybrid search",
+  "description": "Cơ chế BM25 (IDF, bão hòa tần suất k1, chuẩn hóa độ dài b) qua ví dụ tính tay, khi nào tìm từ khóa thắng và khi nào tìm ngữ nghĩa thắng, tách từ tiếng Việt cho BM25, learned sparse (SPLADE) và các cách hợp nhất kết quả: RRF, chuẩn hóa điểm có trọng số.",
+  "lead": "Embedding giỏi bắt ý diễn đạt khác nhau, nhưng lại hay trượt khi người dùng gõ mã sản phẩm, số hiệu văn bản hay một tên riêng hiếm. Tìm kiếm từ khóa thì ngược lại. Hybrid search chạy cả hai và hợp nhất kết quả — bài này giải thích từng mảnh, kèm ví dụ tính tay và công cụ để bạn tự thử.",
+  "level": "Trung cấp",
+  "reviewed": "2026-10-22",
+  "kinds": ["nen-tang", "nghien-cuu", "kinh-nghiem", "nhan-dinh"]
+}
+---
+<div class="callout tom-tat">
+<ul>
+<li><strong>Tìm kiếm từ khóa</strong> (lexical, ví dụ BM25) khớp chính xác các từ; mạnh với mã, số hiệu, tên riêng, thuật ngữ hiếm. <strong>Tìm kiếm ngữ nghĩa</strong> (dense, embedding) khớp ý; mạnh khi người hỏi diễn đạt khác tài liệu.</li>
+<li><strong>BM25</strong> chấm điểm bằng ba ý: từ hiếm quan trọng hơn (IDF), lặp lại một từ có lợi nhưng <em>bão hòa</em> (k1), và tài liệu dài bị trừ bớt (b).</li>
+<li>Với tiếng Việt, cách cắt token (theo âm tiết hay theo từ) ảnh hưởng trực tiếp chất lượng BM25; xử lý dấu cũng cần thiết kế.</li>
+<li><strong>Hợp nhất</strong> hai danh sách: <strong>RRF</strong> chỉ dùng thứ hạng, gần như không cần chỉnh; <strong>chuẩn hóa điểm + trọng số</strong> linh hoạt hơn nhưng cần dữ liệu để chỉnh. Có thể đưa hợp của hai danh sách thẳng vào reranker.</li>
+</ul>
+</div>
+
+<h2>Hai cách “khớp” câu hỏi với tài liệu</h2>
+<p>Xét ba câu hỏi gửi tới trợ lý của một sàn thương mại điện tử và một ngân hàng:</p>
+<ol>
+<li>“Máy giặt báo lỗi <strong>E21</strong> là sao?”</li>
+<li>“Tôi muốn <strong>trả lại</strong> đôi giày vì không vừa.”</li>
+<li>“Quy định cho vay theo <strong>Thông tư 39/2016/TT-NHNN</strong>?”</li>
+</ol>
+<p>Câu 2 cần khớp ý: tài liệu viết “chính sách <em>đổi trả</em>, <em>hoàn trả</em> sản phẩm”, không có cụm “trả lại đôi giày”. Đây là sở trường của embedding (xem [[link:truy-hoi/embedding]]). Câu 1 và 3 thì ngược lại: điều quan trọng nhất là chuỗi “E21” hay “39/2016”. Với embedding, “E21” và “E12” có thể gần nhau đến mức không phân biệt; với tìm từ khóa, chúng là hai token khác hẳn. Hệ thống chỉ có một trong hai cách sẽ thất bại có hệ thống với một nhóm câu hỏi.</p>
+
+<div class="callout nghien-cuu">
+<p>Trên BEIR — 18 bộ dữ liệu truy hồi đa miền đánh giá zero-shot (không huấn luyện trên miền đích) — BM25 là một baseline rất khó vượt, và nhiều mô hình dense tổng quát hóa kém ra ngoài miền dữ liệu chúng được huấn luyện[[cite:thakur2021]]. Các mô hình embedding sau này đã cải thiện: E5 được báo cáo là mô hình đầu tiên vượt BM25 trên BEIR mà không dùng dữ liệu có nhãn[[cite:wang2022e5]]. Nhưng “vượt trung bình” không có nghĩa là thắng trên <em>mọi</em> bộ dữ liệu hay mọi loại câu hỏi — và dữ liệu của bạn không nằm trong BEIR.</p>
+</div>
+
+<h2>BM25 hoạt động thế nào</h2>
+<p>BM25 là hàm xếp hạng từ khóa chuẩn mực, có nền tảng xác suất được tổng hợp đầy đủ trong Robertson và Zaragoza (2009)[[cite:robertson2009]]. Với truy vấn Q gồm các từ t và tài liệu D:</p>
+<pre><code>score(D, Q) = Σ  IDF(t) × tf(t,D) × (k1 + 1)
+             t∈Q        ─────────────────────────────────────────
+                        tf(t,D) + k1 × (1 − b + b × |D| / avgdl)
+
+IDF(t) = ln( 1 + (N − n(t) + 0.5) / (n(t) + 0.5) )      ← dạng Lucene dùng
+
+tf(t,D) : số lần t xuất hiện trong D        |D|   : độ dài D (số token)
+n(t)    : số tài liệu chứa t                avgdl : độ dài trung bình
+N       : tổng số tài liệu                  k1, b : tham số (Lucene mặc định 1.2 và 0.75)</code></pre>
+<p>Công thức IDF và giá trị mặc định k1 = 1,2, b = 0,75 ở trên lấy từ Lucene, thư viện nền của Elasticsearch và OpenSearch[[cite:lucenebm25]]. Ba thành phần mang ba trực giác:</p>
+<ul>
+<li><strong>IDF</strong> (inverse document frequency): từ xuất hiện ở ít tài liệu thì mang nhiều thông tin. “pin” trong kho tài liệu điện thoại có giá trị phân biệt hơn “bảo hành”.</li>
+<li><strong>k1 — bão hòa tần suất</strong>: một từ xuất hiện nhiều lần là dấu hiệu liên quan, nhưng lần thứ 10 không đáng giá bằng lần thứ 2. Phần tf có trần là k1 + 1.</li>
+<li><strong>b — chuẩn hóa độ dài</strong>: tài liệu dài tự nhiên chứa nhiều từ hơn; b = 1 chuẩn hóa hoàn toàn theo độ dài, b = 0 bỏ qua độ dài.</li>
+</ul>
+
+<h3>Tính tay một ví dụ nhỏ</h3>
+<p>Kho N = 1.000 tài liệu hỗ trợ khách hàng. Truy vấn: “bảo hành pin” (giả sử đã tách từ, nên “bảo hành” là một token). “bảo hành” xuất hiện trong 300 tài liệu, “pin” trong 20 tài liệu. Dùng k1 = 1,2, b = 0,75.</p>
+<ul>
+<li>IDF(“bảo hành”) = ln(1 + 700,5 / 300,5) = ln(3,331) ≈ <strong>1,20</strong></li>
+<li>IDF(“pin”) = ln(1 + 980,5 / 20,5) = ln(48,83) ≈ <strong>3,89</strong></li>
+</ul>
+<p>Hiệu ứng bão hòa: với tài liệu có độ dài đúng bằng trung bình, phần tf bằng tf × 2,2 / (tf + 1,2):</p>
+<table>
+<thead><tr><th>tf</th><th>1</th><th>2</th><th>5</th><th>10</th><th>→ ∞</th></tr></thead>
+<tbody><tr><td>Phần tf</td><td>1,00</td><td>1,38</td><td>1,77</td><td>1,96</td><td>2,20</td></tr></tbody>
+</table>
+<p>Giờ chấm ba tài liệu:</p>
+<table>
+<thead><tr><th>Tài liệu</th><th>Độ dài</th><th>tf “bảo hành”</th><th>tf “pin”</th><th>Phép tính</th><th>Điểm</th></tr></thead>
+<tbody>
+<tr><td>A — “Bảo hành pin iPhone…”</td><td>= avgdl</td><td>3</td><td>1</td><td>1,20 × 1,57 + 3,89 × 1,00</td><td><strong>5,78</strong></td></tr>
+<tr><td>C — Bài dài về pin, nhắc bảo hành một lần</td><td>2 × avgdl</td><td>1</td><td>2</td><td>1,20 × 0,71 + 3,89 × 1,07</td><td>5,03</td></tr>
+<tr><td>B — “Chính sách bảo hành chung”</td><td>= avgdl</td><td>6</td><td>0</td><td>1,20 × 1,83 + 0</td><td>2,21</td></tr>
+</tbody></table>
+<p>(Với C, mẫu số dùng 1,2 × (0,25 + 0,75 × 2) = 2,1, nên phần tf của “pin” là 2 × 2,2 / 4,1 ≈ 1,07 và của “bảo hành” là 2,2 / 3,1 ≈ 0,71.) Tài liệu B lặp “bảo hành” tới 6 lần nhưng vẫn xếp cuối: từ phổ biến có IDF thấp, và việc lặp bị bão hòa. Tài liệu C có “pin” 2 lần nhưng bị trừ vì dài gấp đôi. Đây là lý do BM25 khó bị “nhồi từ khóa” hơn đếm từ đơn thuần.</p>
+
+<h2>Khi nào từ khóa thắng, khi nào ngữ nghĩa thắng</h2>
+<table>
+<thead><tr><th>Loại câu hỏi</th><th>Ví dụ</th><th>Thường thắng</th><th>Lý do</th></tr></thead>
+<tbody>
+<tr><td>Mã, số hiệu, SKU</td><td>“lỗi E21”, “SKU 8935049501234”, “Điều 35”</td><td>Từ khóa</td><td>Khớp chuỗi chính xác; embedding không phân biệt tốt các chuỗi gần giống</td></tr>
+<tr><td>Tên riêng hiếm, thuật ngữ nội bộ</td><td>tên dự án nội bộ, tên thuốc, tên xã</td><td>Từ khóa</td><td>Từ hiếm trong dữ liệu huấn luyện embedding nhưng có IDF cao trong BM25</td></tr>
+<tr><td>Cụm từ chính xác tiếng Việt</td><td>“hợp đồng lao động không xác định thời hạn”</td><td>Từ khóa (truy vấn cụm)</td><td>Thuật ngữ pháp lý có nghĩa cố định, cần khớp đúng cụm</td></tr>
+<tr><td>Diễn đạt khác, đồng nghĩa</td><td>“trả lại giày” ↔ “đổi trả sản phẩm”</td><td>Ngữ nghĩa</td><td>Không chung từ, chung ý</td></tr>
+<tr><td>Câu hỏi mô tả, dài</td><td>“làm sao để tiền về nhanh khi hủy đơn đã thanh toán”</td><td>Ngữ nghĩa</td><td>Nhiều từ chức năng; ý nằm ở tổng thể</td></tr>
+<tr><td>Đa ngôn ngữ</td><td>hỏi tiếng Việt, tài liệu tiếng Anh</td><td>Ngữ nghĩa (mô hình đa ngôn ngữ)</td><td>BM25 không khớp được qua ngôn ngữ</td></tr>
+</tbody></table>
+<p>Trong thực tế, cùng một hệ thống nhận đủ các loại trên. Đó là lý do hybrid search trở thành cấu hình mặc định của nhiều hệ thống RAG — và vì sao [[link:nen-tang/kien-truc-tong-quan]] vẽ chỉ mục gồm cả vector lẫn từ khóa.</p>
+
+<h2>BM25 cho tiếng Việt: âm tiết, từ và dấu</h2>
+<p>Tiếng Việt viết cách nhau theo <strong>âm tiết</strong>, nhưng một <strong>từ</strong> có thể gồm nhiều âm tiết: “bảo hành”, “hợp đồng”, “thanh toán”. Tokenizer mặc định của các search engine thường cắt theo khoảng trắng, tức theo âm tiết. Hệ quả kinh điển: “học sinh” và “sinh học” cho ra <em>cùng một tập token</em> {học, sinh}, nên BM25 dạng túi từ không phân biệt được hai khái niệm khác hẳn nhau.</p>
+<p>Có ba hướng xử lý, thường kết hợp:</p>
+<ol>
+<li><strong>Tách từ</strong> (word segmentation) trước khi lập chỉ mục và truy vấn. Thư viện mã nguồn mở như underthesea (<code>word_tokenize</code>, ví dụ ghép “khởi nghiệp”, “Quảng Trị” thành một đơn vị)[[cite:underthesea]] hay pyvi (<code>ViTokenizer</code>, nối âm tiết bằng dấu gạch dưới)[[cite:pyvi]] làm việc này. Rủi ro: tách sai với thuật ngữ chuyên ngành hoặc tên riêng, và tách <em>không nhất quán</em> giữa lúc lập chỉ mục với lúc truy vấn.</li>
+<li><strong>Giữ âm tiết nhưng thêm n-gram âm tiết</strong> (shingle, ví dụ “học_sinh”, “sinh_học” như các token bigram) hoặc dùng truy vấn cụm (phrase query) để thưởng cho các âm tiết đứng liền nhau đúng thứ tự.</li>
+<li><strong>Nhiều trường song song</strong>: một trường theo âm tiết (độ phủ cao, chịu được tách từ sai), một trường theo từ hoặc bigram (độ chính xác cao), cộng điểm có trọng số.</li>
+</ol>
+<p><strong>Dấu thanh</strong> là vấn đề thứ hai. Người dùng hay gõ không dấu (“chinh sach doi tra”). Có thể lập chỉ mục thêm một trường đã bỏ dấu: bộ lọc <code>asciifolding</code> của Elasticsearch chuyển ký tự ngoài bảng ASCII cơ bản về dạng ASCII tương đương (à → a), và tùy chọn <code>preserve_original</code> giữ cả token gốc lẫn token đã bỏ dấu[[cite:esasciifolding]]. Nhưng bỏ dấu làm mất thông tin: “ban” có thể là bàn, bán, bạn, bản. Truy vấn có dấu nên được ưu tiên khớp trường có dấu. Chi tiết xử lý truy vấn không dấu ở [[link:tim-kiem/xu-ly-truy-van]].</p>
+<div class="callout kinh-nghiem">
+<p><strong>Kiểm tra analyzer trước khi tin nó.</strong> Thực hành phổ biến: lấy 20–30 câu truy vấn thật và cho chạy qua analyzer (ví dụ API <code>_analyze</code> của Elasticsearch/OpenSearch) để xem token thực sự sinh ra — đặc biệt với chữ “đ”, chữ hoa có dấu, mã sản phẩm có dấu gạch, số có dấu chấm phân cách (“1.500.000đ”). Rất nhiều lỗi BM25 tiếng Việt nằm ở bước này chứ không ở công thức.</p>
+</div>
+
+<h2>Learned sparse: điểm giữa hai thế giới</h2>
+<p>Giữa BM25 và dense còn có <strong>learned sparse retrieval</strong>: một mô hình neural sinh ra vector <em>thưa</em> trên từ vựng — mỗi chiều ứng với một token, phần lớn bằng 0 — nhưng trọng số được <em>học</em> thay vì tính bằng công thức, và mô hình có thể thêm cả những từ liên quan không xuất hiện trong văn bản (mở rộng từ vựng). SPLADE là đại diện tiêu biểu: dùng điều chuẩn độ thưa và hiệu ứng bão hòa log trên trọng số từ, cho biểu diễn rất thưa mà vẫn dùng được inverted index như BM25; điều chỉnh mức điều chuẩn cho phép đổi hiệu quả lấy tốc độ[[cite:formal2021]]. BGE-M3 cũng xuất được “trọng số từ vựng” dạng sparse song song với vector dense từ cùng một lượt mã hóa[[cite:chen2024m3,bgem3card]].</p>
+<p>Đánh đổi: learned sparse thừa hưởng khả năng khớp chính xác và inverted index, nhưng chất lượng với tiếng Việt phụ thuộc vào tokenizer và dữ liệu huấn luyện của mô hình — cần đo như mọi mô hình khác.</p>
+
+<h2>Hợp nhất hai danh sách kết quả</h2>
+<figure class="diagram">
+<svg viewBox="0 0 740 250" width="740" role="img" aria-labelledby="hs1t hs1d">
+<title id="hs1t">Kiến trúc hybrid search</title>
+<desc id="hs1d">Câu hỏi được gửi song song tới chỉ mục BM25 và chỉ mục vector, mỗi nhánh trả về khoảng 50 ứng viên. Hai danh sách được hợp nhất bằng RRF hoặc trộn điểm có trọng số, sau đó có thể qua reranker để chọn top-k đưa vào prompt.</desc>
+<defs><marker id="hsah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="arrowhead"/></marker></defs>
+<rect x="20" y="95" width="120" height="56" rx="8" class="box-b"/><text x="80" y="119" font-size="14" text-anchor="middle">Câu hỏi</text><text x="80" y="137" font-size="11.5" text-anchor="middle" class="muted">đã chuẩn hóa</text>
+<rect x="190" y="30" width="150" height="56" rx="8" class="box"/><text x="265" y="54" font-size="14" text-anchor="middle">BM25</text><text x="265" y="72" font-size="11.5" text-anchor="middle" class="muted">top ~50 theo từ khóa</text>
+<rect x="190" y="160" width="150" height="56" rx="8" class="box"/><text x="265" y="184" font-size="14" text-anchor="middle">Vector (ANN)</text><text x="265" y="202" font-size="11.5" text-anchor="middle" class="muted">top ~50 theo ngữ nghĩa</text>
+<rect x="390" y="95" width="150" height="56" rx="8" class="box-a"/><text x="465" y="119" font-size="14" text-anchor="middle" font-weight="700">Hợp nhất</text><text x="465" y="137" font-size="11.5" text-anchor="middle" class="muted">RRF / trộn điểm</text>
+<rect x="590" y="95" width="130" height="56" rx="8" class="box-w"/><text x="655" y="119" font-size="14" text-anchor="middle">Reranker</text><text x="655" y="137" font-size="11.5" text-anchor="middle" class="muted">(tùy chọn) → top-k</text>
+<path d="M140 115 L188 62" class="ln" marker-end="url(#hsah)"/>
+<path d="M140 131 L188 184" class="ln" marker-end="url(#hsah)"/>
+<path d="M340 58 L388 112" class="ln" marker-end="url(#hsah)"/>
+<path d="M340 188 L388 134" class="ln" marker-end="url(#hsah)"/>
+<path d="M540 123 H588" class="ln" marker-end="url(#hsah)"/>
+<text x="380" y="240" font-size="11.5" text-anchor="middle" class="muted">Số ứng viên mỗi nhánh là điểm khởi đầu minh họa, cần đo lại trên dữ liệu của bạn.</text>
+</svg>
+<figcaption>Hybrid search: hai nhánh truy hồi chạy song song, hợp nhất, rồi (tùy chọn) xếp hạng lại.</figcaption>
+</figure>
+<p>Khó khăn cốt lõi: điểm BM25 (ví dụ 5,78) và cosine (ví dụ 0,83) nằm trên hai thang đo <em>không so sánh được</em>. Có hai họ giải pháp.</p>
+
+<h3>Reciprocal Rank Fusion (RRF): chỉ dùng thứ hạng</h3>
+<p>RRF bỏ hẳn điểm gốc, chỉ dùng thứ hạng. Với mỗi tài liệu d xuất hiện trong các danh sách R:</p>
+<pre><code>RRF(d) = Σ   1 / (k + hạng_r(d))        k = 60 trong bài báo gốc
+         r∈R</code></pre>
+<div class="callout nghien-cuu">
+<p>Cormack, Clarke và Büttcher (SIGIR 2009) đề xuất RRF ban đầu chỉ như một baseline. Hằng số k = 60 được cố định trong một thí nghiệm thăm dò và không đổi trong các lần kiểm chứng sau; bảng thăm dò của họ cho thấy k = 60 gần tối ưu nhưng lựa chọn này “không quá quan trọng”. Khi hợp nhất các lượt chạy nộp cho TREC và các phương pháp learning-to-rank trên LETOR 3, RRF tốt hơn Condorcet Fuse trong tất cả các lần so sánh được báo cáo, tốt hơn CombMNZ trong phần lớn trường hợp (trên LETOR 3, CombMNZ nhỉnh hơn một chút nhưng không có ý nghĩa thống kê), và thường tốt hơn hệ thống đơn lẻ tốt nhất; trên các thí nghiệm thăm dò và TREC, mức hơn trung bình khoảng 4–5% MAP[[cite:cormack2009]]. Lưu ý điều kiện: các danh sách được hợp nhất là nhiều hệ thống truy hồi từ khóa/learning-to-rank năm 2009, không phải cặp BM25 + embedding hiện đại.</p>
+</div>
+<p>Trực giác: tài liệu được <em>cả hai</em> nhánh xếp khá cao sẽ thắng tài liệu chỉ đứng đầu ở một nhánh. Hằng số k làm “mềm” lợi thế của hạng 1 — với k = 60, khoảng cách giữa hạng 1 (1/61) và hạng 5 (1/65) khá nhỏ, nên một hệ thống “lạc đề” không thể một mình đẩy tài liệu lên đầu.</p>
+<p>Ví dụ với hai danh sách mặc định trong công cụ dưới đây, BM25 = [D3, D1, D7, D2, D9] và vector = [D1, D5, D3, D8, D2], k = 60:</p>
+<ul>
+<li>D1: 1/(60+2) + 1/(60+1) = 0,01613 + 0,01639 = <strong>0,03252</strong> — hạng 1</li>
+<li>D3: 1/61 + 1/63 = 0,01639 + 0,01587 = 0,03227 — hạng 2</li>
+<li>D2: 1/64 + 1/65 = 0,01563 + 0,01538 = 0,03101 — hạng 3</li>
+<li>D5 (chỉ ở vector, hạng 2): 1/62 = 0,01613 — hạng 4, đứng trên D7 (chỉ ở BM25, hạng 3): 1/63 = 0,01587</li>
+</ul>
+<div class="widget" data-widget="rrf"><p>Bật JavaScript để dùng công cụ tương tác.</p></div>
+<p>Hãy thử: (1) kéo k về 0 — tài liệu đứng đầu một danh sách được ưu tiên mạnh hơn hẳn; (2) đặt k = 120 — các hạng gần nhau có điểm gần như bằng nhau, thứ tự chủ yếu do “xuất hiện ở mấy danh sách”; (3) thêm một mã chỉ có ở một danh sách nhưng ở hạng 1 và xem nó đứng đâu so với tài liệu ở hạng 4–5 của cả hai danh sách. Bạn sẽ thấy RRF thưởng cho sự <em>đồng thuận</em>.</p>
+
+<h3>Chuẩn hóa điểm và trộn có trọng số</h3>
+<p>Cách thứ hai: đưa điểm mỗi nhánh về cùng thang (thường [0, 1]) rồi trộn: <code>điểm = α × dense_chuẩn_hóa + (1 − α) × bm25_chuẩn_hóa</code>. Chuẩn hóa phổ biến nhất là min-max theo từng truy vấn: (s − min) / (max − min).</p>
+<p>Ví dụ: BM25 trả về D3 = 12,4; D1 = 9,1; D7 = 3,0. Vector trả về D1 = 0,83; D5 = 0,81; D3 = 0,79.</p>
+<table>
+<thead><tr><th>Tài liệu</th><th>BM25 min-max</th><th>Dense min-max</th><th>α = 0,5</th></tr></thead>
+<tbody>
+<tr><td>D1</td><td>(9,1 − 3,0)/9,4 = 0,65</td><td>1,00</td><td><strong>0,82</strong></td></tr>
+<tr><td>D3</td><td>1,00</td><td>0,00</td><td>0,50</td></tr>
+<tr><td>D5</td><td>— (coi là 0)</td><td>0,50</td><td>0,25</td></tr>
+<tr><td>D7</td><td>0,00</td><td>— (coi là 0)</td><td>0,00</td></tr>
+</tbody></table>
+<p>Hãy để ý D3: cosine 0,79 gần như ngang 0,83 của D1, nhưng sau min-max lại thành 0 — chuẩn hóa đã <em>phóng đại</em> chênh lệch nhỏ của nhánh dense. Ngược lại, nếu cả ba điểm BM25 đều cao như nhau thì min-max lại biến chênh lệch nhỏ thành 0–1. Min-max cũng nhạy với một điểm ngoại lai. Các biến thể khác (z-score, chia cho điểm lớn nhất, hoặc dùng cận lý thuyết cho cosine) có điểm yếu riêng. Đổi lại, phương pháp trộn điểm cho phép chỉnh α theo dữ liệu: nếu bạn có bộ câu hỏi kiểm thử, có thể chọn α tối ưu cho miền của mình.</p>
+
+<h3>So sánh các cách hợp nhất</h3>
+<table>
+<thead><tr><th>Phương pháp</th><th>Cần chỉnh tham số?</th><th>Dùng điểm gốc?</th><th>Ưu điểm</th><th>Nhược điểm</th></tr></thead>
+<tbody>
+<tr><td>RRF</td><td>Hầu như không (k = 60 là mặc định phổ biến)</td><td>Không</td><td>Đơn giản, bền với thang điểm khác nhau, dễ thêm nhánh thứ ba</td><td>Bỏ mất thông tin “cách biệt bao xa”; nhánh kém vẫn đóng góp ngang nhánh tốt nếu không gán trọng số</td></tr>
+<tr><td>Chuẩn hóa + trọng số</td><td>Có (α, cách chuẩn hóa)</td><td>Có</td><td>Tận dụng độ tự tin của từng nhánh; tối ưu được theo miền</td><td>Nhạy với phân phối điểm; α tốt trên dữ liệu này có thể tệ trên dữ liệu khác</td></tr>
+<tr><td>Hợp tập rồi rerank</td><td>Chọn số ứng viên mỗi nhánh</td><td>Không cần</td><td>Reranker chấm lại từ đầu nên thứ tự hợp nhất ít quan trọng</td><td>Thêm chi phí và độ trễ của reranker</td></tr>
+</tbody></table>
+<p>Nếu đằng nào cũng có reranker (xem [[link:tim-kiem/reranking]]), cách hợp nhất chủ yếu quyết định <em>tài liệu nào lọt vào danh sách ứng viên</em>, chứ không phải thứ tự cuối cùng. Khi đó điều quan trọng là Recall@N của tập hợp nhất.</p>
+
+<div class="callout kinh-nghiem">
+<p><strong>Điểm khởi đầu thực dụng</strong> (cần đo lại): mỗi nhánh lấy vài chục ứng viên, hợp nhất bằng RRF với k = 60, áp cùng bộ lọc metadata/quyền truy cập cho <em>cả hai</em> nhánh, rồi rerank. Lỗi hay gặp là chỉ áp bộ lọc quyền ở nhánh vector mà quên nhánh BM25 (hoặc ngược lại), làm lộ tài liệu qua nhánh kia — xem [[link:van-hanh/bao-mat]].</p>
+</div>
+
+<h2>Đánh đổi và lỗi thường gặp</h2>
+<details class="qa"><summary>Thêm BM25 vào nhưng kết quả không tốt hơn — vì sao?</summary>
+<p>Có thể bộ câu hỏi kiểm thử của bạn không chứa loại câu mà BM25 mạnh (mã, tên riêng). Hãy phân loại câu hỏi và đo riêng từng nhóm; hybrid thường cải thiện mạnh ở một nhóm và trung tính ở nhóm khác. Cũng có thể analyzer tiếng Việt đang cắt sai token.</p></details>
+<details class="qa"><summary>Hybrid có làm tăng độ trễ gấp đôi không?</summary>
+<p>Không nhất thiết: hai nhánh chạy song song nên độ trễ là của nhánh chậm hơn cộng bước hợp nhất (rất rẻ). Chi phí thực là vận hành thêm một chỉ mục và giữ hai chỉ mục đồng bộ khi tài liệu thay đổi. Xem [[link:van-hanh/chi-phi-do-tre]].</p></details>
+<details class="qa"><summary>Có nên chỉnh k1, b của BM25?</summary>
+<p>Mặc định của Lucene là điểm khởi đầu hợp lý. Chunk trong RAG thường có độ dài tương đối đồng đều nên ảnh hưởng của b nhỏ hơn so với tìm kiếm trên tài liệu dài ngắn lẫn lộn. Chỉ chỉnh khi có bộ kiểm thử để đo.</p></details>
+<details class="qa"><summary>Trọng số α tìm được trên bộ kiểm thử có dùng mãi được không?</summary>
+<p>Không. Khi đổi mô hình embedding, đổi analyzer hoặc kho tài liệu thay đổi nhiều, phân phối điểm thay đổi theo và α cần chỉnh lại. Đây là chi phí vận hành mà RRF tránh được.</p></details>
+
+<div class="callout nhan-dinh">
+<p>Theo nhận định của người biên soạn, với RAG tiếng Việt trong doanh nghiệp — nơi câu hỏi hay chứa mã hợp đồng, số hiệu văn bản, tên sản phẩm — hybrid search gần như luôn đáng làm, và nên làm <em>trước</em> khi thử các kỹ thuật phức tạp hơn như viết lại truy vấn bằng LLM. Phần việc khó nhất thường không phải chọn RRF hay trộn điểm, mà là làm cho analyzer BM25 xử lý đúng tiếng Việt. Đây là nhận định thực hành; hãy kiểm chứng bằng số đo trên dữ liệu của bạn.</p>
+</div>
+
+<h2>Tự kiểm tra hiểu biết</h2>
+<div class="callout kiem-chung">
+<ol>
+<li>Trong ví dụ tính tay, vì sao tài liệu B lặp “bảo hành” 6 lần vẫn thua tài liệu A? Nêu hai thành phần của BM25 góp phần vào kết quả này.</li>
+<li>Với tokenizer theo âm tiết, vì sao BM25 không phân biệt được “học sinh” và “sinh học”? Đề xuất hai cách khắc phục.</li>
+<li>Tính điểm RRF (k = 60) của một tài liệu đứng hạng 1 ở BM25 nhưng không có trong danh sách vector, và so với tài liệu đứng hạng 5 ở cả hai danh sách. (Đáp án: 1/61 ≈ 0,0164 so với 2/65 ≈ 0,0308 — tài liệu thứ hai thắng.)</li>
+<li>Lấy 30 câu hỏi thật, chia thành nhóm “có mã/tên riêng” và “diễn đạt tự do”. Đo Recall@10 của BM25, dense và hybrid cho từng nhóm. Kết quả có khớp bảng “khi nào từ khóa thắng” không?</li>
+</ol>
+</div>
+
+<h2>Đọc tiếp</h2>
+<ul>
+<li>Bài tiếp theo: [[link:tim-kiem/reranking]] — xếp hạng lại danh sách ứng viên bằng cross-encoder, ColBERT hoặc LLM.</li>
+<li>Nền tảng của nhánh vector: [[link:truy-hoi/embedding]] và [[link:truy-hoi/vector-index]].</li>
+<li>Xử lý truy vấn không dấu, viết sai, nhiều ý: [[link:tim-kiem/xu-ly-truy-van]].</li>
+<li>Đo xem hybrid có thật sự tốt hơn: [[link:danh-gia/do-luong-retrieval]].</li>
+<li>Tài liệu gốc: Robertson &amp; Zaragoza về BM25[[cite:robertson2009]], bài báo RRF[[cite:cormack2009]], BEIR[[cite:thakur2021]], SPLADE[[cite:formal2021]].</li>
+</ul>

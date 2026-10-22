@@ -1,0 +1,197 @@
+---
+{
+  "title": "Vector index: tìm vector gần nhất trong hàng triệu bản ghi bằng cách nào?",
+  "navTitle": "Vector index (HNSW, IVF, PQ)",
+  "description": "Chi phí tìm kiếm chính xác, cơ chế HNSW, IVF, PQ và DiskANN, đánh đổi giữa recall, độ trễ và bộ nhớ, cách ước tính bộ nhớ, vấn đề lọc metadata với ANN và bảng quyết định chọn thư viện, pgvector, search engine hay vector database.",
+  "lead": "Có embedding rồi, câu hỏi tiếp theo là: làm sao tìm 10 vector gần câu hỏi nhất trong 10 triệu vector trong vài chục mili-giây? So sánh với từng vector một là chính xác nhưng quá chậm và tốn bộ nhớ. Bài này giải thích các cấu trúc chỉ mục gần đúng phổ biến, cái giá của chúng, và cách chọn hạ tầng mà không bị dẫn dắt bởi quảng cáo.",
+  "level": "Trung cấp",
+  "reviewed": "2026-10-22",
+  "kinds": ["nen-tang", "nghien-cuu", "kinh-nghiem", "nhan-dinh"]
+}
+---
+<div class="callout tom-tat">
+<ul>
+<li><strong>Tìm kiếm chính xác</strong> (exact kNN, brute-force) so sánh truy vấn với mọi vector: chi phí tỷ lệ với số vector × số chiều. Với kho nhỏ hoặc ít truy vấn, đây vẫn là lựa chọn tốt nhất.</li>
+<li><strong>ANN</strong> (Approximate Nearest Neighbor — lân cận gần đúng) chấp nhận đôi khi bỏ sót vài lân cận thật để đổi lấy tốc độ. Ba họ chính: <strong>đồ thị</strong> (HNSW, Vamana/DiskANN), <strong>phân cụm</strong> (IVF) và <strong>nén</strong> (PQ, lượng tử hóa vô hướng) — thường được kết hợp.</li>
+<li>Mọi chỉ mục ANN là một điểm trên tam giác <strong>recall – độ trễ – bộ nhớ</strong>; tham số như <code>efSearch</code>, <code>nprobe</code> dịch chuyển điểm đó.</li>
+<li><strong>Lọc metadata</strong> (theo quyền, ngày, loại tài liệu) kết hợp với ANN không đơn giản: lọc sau khi tìm có thể trả về quá ít kết quả.</li>
+<li>Chọn hạ tầng theo dữ liệu, quy mô và hệ thống sẵn có của bạn, đo trên dữ liệu của bạn — không theo benchmark của nhà cung cấp.</li>
+</ul>
+</div>
+
+<h2>Bài toán: tìm k lân cận gần nhất</h2>
+<p>Sau khi mỗi chunk được biến thành vector (xem [[link:truy-hoi/embedding]]), truy hồi dense quy về: cho vector truy vấn q, tìm k vector trong kho có độ tương đồng lớn nhất với q. Đây là bài toán <strong>k-nearest neighbors</strong> (kNN).</p>
+
+<h3>Chi phí của tìm kiếm chính xác</h3>
+<p>Cách đơn giản nhất: tính độ tương đồng giữa q và <em>từng</em> vector, giữ lại top-k. Hãy ước tính với một kho 10 triệu chunk, embedding 1024 chiều float32:</p>
+<ul>
+<li><strong>Tính toán</strong>: 10.000.000 × 1.024 ≈ 1,02 × 10<sup>10</sup> phép nhân-cộng cho <em>mỗi</em> truy vấn.</li>
+<li><strong>Bộ nhớ</strong>: 10.000.000 × 1.024 chiều × 4 byte = 40.960.000.000 byte ≈ <strong>41 GB</strong> (≈ 38,1 GiB), và mỗi truy vấn phải đọc qua toàn bộ chừng đó dữ liệu. Với băng thông bộ nhớ cỡ vài chục GB/s của một máy chủ thông thường, riêng việc đọc đã tốn cỡ một giây trở lên — ước lượng thô, chưa tính song song hóa hay GPU.</li>
+</ul>
+<p>Ngược lại, với kho 50.000 chunk cùng cấu hình, dữ liệu chỉ khoảng 205 MB và mỗi truy vấn khoảng 5 × 10<sup>7</sup> phép tính — một CPU hiện đại làm việc này rất nhanh. Hướng dẫn chính thức của Faiss khuyên: nếu chỉ chạy vài nghìn tới chục nghìn truy vấn, xây chỉ mục không đáng công và tìm kiếm phẳng (<code>Flat</code>) là lựa chọn tốt nhất; đây cũng là chỉ mục duy nhất <em>đảm bảo</em> kết quả chính xác[[cite:faisswiki]]. pgvector cũng mặc định tìm chính xác khi chưa tạo chỉ mục, với recall hoàn hảo[[cite:pgvector]].</p>
+
+<div class="callout kinh-nghiem">
+<p><strong>Bắt đầu bằng brute-force.</strong> Thực hành phổ biến là dùng tìm kiếm chính xác cho tới khi độ trễ đo được vượt ngân sách. Nó không có tham số cần chỉnh, không có recall bị mất, và là <em>chuẩn đối chiếu</em> để đo chất lượng của chỉ mục ANN sau này. Ngưỡng chuyển sang ANN phụ thuộc phần cứng và yêu cầu độ trễ — không có con số chung.</p>
+</div>
+
+<h3>“Recall” của ANN khác “recall” của truy hồi</h3>
+<div class="callout nen-tang">
+<p>Có hai khái niệm recall dễ nhầm:</p>
+<ul>
+<li><strong>Recall của chỉ mục ANN</strong>: trong k kết quả ANN trả về, bao nhiêu phần trùng với k kết quả của tìm kiếm <em>chính xác</em>? Đo chất lượng của <em>thuật toán tìm kiếm</em>, không cần nhãn người.</li>
+<li><strong>Recall của truy hồi</strong> (Recall@k trong [[link:danh-gia/do-luong-retrieval]]): trong k kết quả, bao nhiêu tài liệu <em>thật sự liên quan</em> theo nhãn? Đo chất lượng của <em>cả hệ thống</em> (embedding + chỉ mục + dữ liệu).</li>
+</ul>
+<p>Một chỉ mục có recall ANN 99% vẫn cho truy hồi tệ nếu embedding kém. Ngược lại, giảm recall ANN từ 99% xuống 95% có thể gần như không ảnh hưởng tới chất lượng câu trả lời — hoặc có ảnh hưởng. Chỉ đo mới biết.</p>
+</div>
+
+<h2>HNSW: đồ thị nhiều tầng</h2>
+<p><strong>HNSW</strong> (Hierarchical Navigable Small World) là chỉ mục đồ thị phổ biến nhất hiện nay. Ý tưởng tương tự cách bạn tìm đường trong một thành phố lạ: trước hết đi đường cao tốc tới đúng quận, rồi đường lớn tới đúng phường, cuối cùng mới đi ngõ tới đúng nhà.</p>
+
+<figure class="diagram">
+<svg viewBox="0 0 720 360" width="720" role="img" aria-labelledby="vi1t vi1d">
+<title id="vi1t">Cấu trúc nhiều tầng của HNSW và đường tìm kiếm</title>
+<desc id="vi1d">Ba tầng đồ thị. Tầng 2 trên cùng có rất ít điểm với liên kết dài. Tầng 1 có nhiều điểm hơn. Tầng 0 dưới cùng chứa mọi điểm với liên kết ngắn. Tìm kiếm bắt đầu từ điểm vào ở tầng trên, đi tham lam tới điểm gần truy vấn nhất, rồi xuống tầng dưới và lặp lại cho tới tầng 0.</desc>
+<defs><marker id="viah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="arrowhead"/></marker></defs>
+<text x="20" y="40" font-size="13" font-weight="700" class="muted">Tầng 2</text>
+<text x="20" y="56" font-size="11.5" class="muted">ít điểm, cạnh dài</text>
+<rect x="140" y="20" width="560" height="70" rx="10" class="box-v"/>
+<path d="M190 55 L470 50" class="ln"/>
+<circle cx="190" cy="55" r="8" class="box-w"/><circle cx="470" cy="50" r="8" class="box"/>
+<text x="190" y="40" font-size="11.5" text-anchor="middle" class="muted">điểm vào</text>
+<path d="M198 55 L460 50" class="ln-a" marker-end="url(#viah)"/>
+
+<text x="20" y="150" font-size="13" font-weight="700" class="muted">Tầng 1</text>
+<text x="20" y="166" font-size="11.5" class="muted">nhiều điểm hơn</text>
+<rect x="140" y="125" width="560" height="70" rx="10" class="box-v"/>
+<path d="M190 160 L300 145 L470 155 L560 170 L640 150" class="ln"/>
+<circle cx="190" cy="160" r="7" class="box"/><circle cx="300" cy="145" r="7" class="box"/><circle cx="470" cy="155" r="8" class="box"/><circle cx="560" cy="170" r="8" class="box"/><circle cx="640" cy="150" r="7" class="box"/>
+<path d="M478 156 L550 168" class="ln-a" marker-end="url(#viah)"/>
+<path d="M470 58 V146" class="ln-d" marker-end="url(#viah)"/>
+
+<text x="20" y="260" font-size="13" font-weight="700" class="muted">Tầng 0</text>
+<text x="20" y="276" font-size="11.5" class="muted">mọi điểm, cạnh ngắn</text>
+<rect x="140" y="230" width="560" height="80" rx="10" class="box-v"/>
+<path d="M170 270 L215 255 L260 280 L300 252 L350 275 L400 258 L450 285 L500 262 L560 275 L600 255 L650 280" class="ln"/>
+<circle cx="170" cy="270" r="5" class="box"/><circle cx="215" cy="255" r="5" class="box"/><circle cx="260" cy="280" r="5" class="box"/><circle cx="300" cy="252" r="5" class="box"/><circle cx="350" cy="275" r="5" class="box"/><circle cx="400" cy="258" r="5" class="box"/><circle cx="450" cy="285" r="5" class="box"/><circle cx="500" cy="262" r="5" class="box"/><circle cx="560" cy="275" r="7" class="box"/><circle cx="600" cy="255" r="7" class="box-b"/><circle cx="650" cy="280" r="5" class="box"/>
+<path d="M560 178 V266" class="ln-d" marker-end="url(#viah)"/>
+<path d="M567 271 L593 259" class="ln-a" marker-end="url(#viah)"/>
+<text x="618" y="244" font-size="12" font-weight="700">kết quả</text>
+<text x="380" y="340" font-size="12" text-anchor="middle" class="muted">Mũi tên đậm: bước đi tham lam trong một tầng · Mũi tên đứt: xuống tầng dưới</text>
+</svg>
+<figcaption>HNSW: tìm kiếm bắt đầu ở tầng thưa trên cùng để “nhảy xa”, rồi xuống dần các tầng dày hơn để tinh chỉnh.</figcaption>
+</figure>
+
+<div class="callout nghien-cuu">
+<p>Theo Malkov và Yashunin, HNSW xây <em>tăng dần</em> một chồng đồ thị lân cận trên các tập con lồng nhau của dữ liệu; tầng cao nhất của mỗi điểm được chọn ngẫu nhiên theo phân phối giảm dần theo hàm mũ, nên tầng càng cao càng ít điểm. Tìm kiếm bắt đầu từ tầng trên và tận dụng sự phân tách theo thang khoảng cách giữa các tầng, cho độ phức tạp tăng theo logarit; một heuristic chọn hàng xóm giúp cải thiện đáng kể ở mức recall cao và với dữ liệu phân cụm mạnh[[cite:malkov2016]]. “Logarit” ở đây là xu hướng tăng trưởng được tác giả phân tích và đo, không phải bảo đảm độ trễ cho mọi bộ dữ liệu.</p>
+</div>
+
+<h3>Ba tham số cần hiểu</h3>
+<table>
+<thead><tr><th>Tham số</th><th>Ý nghĩa</th><th>Tăng lên thì</th><th>Tham khảo</th></tr></thead>
+<tbody>
+<tr><td><code>M</code></td><td>Số liên kết hai chiều tạo cho mỗi điểm khi xây đồ thị</td><td>Recall cao hơn, tốn bộ nhớ hơn, xây chậm hơn</td><td>hnswlib: khoảng hợp lý 2–100, 12–48 ổn cho đa số trường hợp; dữ liệu nhiều chiều như embedding có thể cần 48–64 cho recall cao[[cite:hnswlib]]. Mặc định pgvector: 16[[cite:pgvector]]</td></tr>
+<tr><td><code>efConstruction</code></td><td>Kích thước danh sách ứng viên khi <em>xây</em> chỉ mục</td><td>Đồ thị chất lượng hơn, xây chậm hơn; tới một mức thì không cải thiện thêm</td><td>Mặc định pgvector: 64[[cite:pgvector]]</td></tr>
+<tr><td><code>efSearch</code> (hay <code>ef</code>)</td><td>Kích thước danh sách ứng viên khi <em>tìm</em>; phải ≥ k</td><td>Recall cao hơn, truy vấn chậm hơn — <em>chỉnh được lúc chạy</em></td><td>Mặc định pgvector: 40[[cite:pgvector]]</td></tr>
+</tbody></table>
+<p>Điểm thực dụng: <code>M</code> và <code>efConstruction</code> cố định khi xây (đổi phải xây lại), còn <code>efSearch</code> là “núm vặn” để cân recall với độ trễ cho từng truy vấn. Bộ nhớ của HNSW trong Faiss xấp xỉ <code>d × 4 + M × 2 × 4</code> byte mỗi vector[[cite:faisswiki]] — tức là bản thân vector float32 cộng với phần liên kết. HNSW không cần huấn luyện và cho phép thêm vector dần dần, nhưng xóa thì khó: Faiss ghi rõ chỉ mục HNSW của nó không xóa được vector[[cite:faisswiki]]; nhiều hệ thống khác đánh dấu xóa rồi dọn dẹp định kỳ.</p>
+
+<h2>IVF: chia kho thành các cụm</h2>
+<p><strong>IVF</strong> (Inverted File) dùng k-means chia không gian thành <code>nlist</code> cụm, mỗi cụm có một tâm. Mỗi vector được gán vào cụm có tâm gần nhất. Khi tìm, chỉ so truy vấn với các tâm, chọn <code>nprobe</code> cụm gần nhất và chỉ quét vector trong các cụm đó. Giống tra từ điển: mở đúng vần trước, rồi mới đọc từng mục.</p>
+<ul>
+<li><strong>Cần huấn luyện</strong>: k-means phải chạy trên một mẫu dữ liệu trước khi thêm vector. pgvector khuyên chỉ tạo chỉ mục IVFFlat <em>sau khi</em> bảng đã có dữ liệu[[cite:pgvector]].</li>
+<li><strong>Điểm khởi đầu cho số cụm</strong>: Faiss gợi ý 4√N tới 16√N cụm cho kho dưới 1 triệu vector, và các cấu hình lớn hơn (ví dụ 65.536 cụm) cho kho hàng triệu tới hàng tỷ vector, với 30–256 vector huấn luyện cho mỗi cụm[[cite:faisswiki]]. pgvector gợi ý <code>lists</code> = số dòng / 1000 tới 1 triệu dòng và √(số dòng) khi lớn hơn; <code>probes</code> khởi đầu ở √(lists)[[cite:pgvector]].</li>
+<li><strong>Nhược điểm</strong>: truy vấn nằm gần ranh giới cụm có thể bỏ sót lân cận ở cụm bên cạnh (tăng <code>nprobe</code> để bù); nếu phân phối dữ liệu thay đổi nhiều sau khi huấn luyện (ví dụ thêm hẳn một mảng tài liệu mới), cụm trở nên lệch và cần huấn luyện lại.</li>
+</ul>
+<p>So với HNSW, pgvector mô tả IVFFlat xây nhanh hơn và tốn ít bộ nhớ hơn, nhưng đánh đổi tốc độ–recall kém hơn[[cite:pgvector]].</p>
+
+<h2>PQ: nén vector để vừa bộ nhớ</h2>
+<p>HNSW và IVF giảm <em>số phép so sánh</em> nhưng vẫn lưu vector đầy đủ. Khi bộ nhớ là ràng buộc, cần <strong>nén</strong>. <strong>Product Quantization</strong> (PQ — lượng tử hóa tích) chia mỗi vector thành m đoạn con, học riêng một bộ “từ điển” (thường 256 tâm) cho mỗi đoạn, và thay mỗi đoạn bằng chỉ số của tâm gần nhất[[cite:jegou2011]].</p>
+<p>Ví dụ: vector 1024 chiều chia thành m = 64 đoạn, mỗi đoạn 16 chiều. Mỗi đoạn được thay bằng 1 byte (chỉ số trong 256 tâm). Vector 4.096 byte (float32) giờ chỉ còn <strong>64 byte</strong> — nén 64 lần. Khi tìm kiếm, hệ thống tính sẵn bảng khoảng cách từ từng đoạn của truy vấn (chưa nén) tới 256 tâm của đoạn đó; khoảng cách tới mỗi vector nén chỉ còn là tổng của 64 lần tra bảng. Cách so truy vấn gốc với mã nén này gọi là <strong>asymmetric distance computation</strong> (ADC); Jégou và cộng sự kết hợp nó với inverted file và báo cáo áp dụng được tới tập dữ liệu hai tỷ vector trên các bộ mô tả ảnh SIFT/GIST[[cite:jegou2011]].</p>
+<p>Cái giá là độ chính xác: khoảng cách chỉ còn là ước lượng. Thực hành chuẩn là <strong>lấy dư rồi chấm lại</strong> (refine/rerank): dùng PQ lấy vài trăm ứng viên, rồi tính lại khoảng cách chính xác bằng vector gốc (lưu trên đĩa hoặc ở tầng lưu trữ rẻ hơn). Faiss còn có OPQ (xoay không gian trước khi PQ) và lượng tử hóa vô hướng SQ; theo hướng dẫn Faiss, với mã lớn hơn 64 byte, SQ thường chính xác tương đương mà nhanh hơn[[cite:faisswiki]]. Lượng tử hóa int8 và nhị phân ở mức embedding đã được bàn ở [[link:truy-hoi/embedding]].</p>
+
+<h2>Khi dữ liệu không vừa RAM: chỉ mục trên SSD</h2>
+<div class="callout nghien-cuu">
+<p>DiskANN (NeurIPS 2019) đặt chỉ mục đồ thị trên SSD thay vì RAM. Các tác giả báo cáo, trên tập SIFT1B (một tỷ vector mô tả ảnh SIFT) với một máy 16 lõi, 64 GB RAM và SSD giá rẻ: hơn 5.000 truy vấn/giây, độ trễ trung bình dưới 3 ms, 1-recall@1 trên 95%; trong khi các phương pháp quy mô tỷ dùng lượng bộ nhớ tương tự (như cấu hình Faiss nén mà họ so sánh) chững lại quanh 50%[[cite:subramanya2019]]. Bài báo cũng giới thiệu đồ thị Vamana. Điều kiện: dữ liệu SIFT 128 chiều, phần cứng và phiên bản thư viện năm 2019; embedding văn bản 1024 chiều có đặc tính khác.</p>
+</div>
+<p>Bài học tổng quát: quy mô hàng trăm triệu tới tỷ vector không bắt buộc phải có cụm máy RAM khổng lồ, nhưng đòi hỏi chỉ mục được thiết kế cho đĩa. Với đa số hệ thống RAG doanh nghiệp (vài trăm nghìn tới vài chục triệu chunk), HNSW trong RAM hoặc IVF kèm nén thường đã đủ.</p>
+
+<h2>Ước tính bộ nhớ: một ví dụ đầy đủ</h2>
+<p>Giả sử kho 10 triệu chunk, embedding 1024 chiều. Các con số dưới đây là phép tính trực tiếp từ công thức, chưa tính metadata, văn bản gốc, overhead của hệ thống và bản sao (replica):</p>
+<table>
+<thead><tr><th>Cấu hình</th><th>Phép tính</th><th>Xấp xỉ</th></tr></thead>
+<tbody>
+<tr><td>Vector thô float32</td><td>10⁷ × 1.024 × 4 byte</td><td>41 GB</td></tr>
+<tr><td>HNSW, M = 16 (Faiss)</td><td>41 GB + 10⁷ × (16 × 2 × 4) byte</td><td>41 + 1,3 ≈ 42,2 GB</td></tr>
+<tr><td>HNSW, M = 32</td><td>41 GB + 10⁷ × 256 byte</td><td>≈ 43,5 GB</td></tr>
+<tr><td>Vector int8 (lượng tử hóa vô hướng)</td><td>10⁷ × 1.024 × 1 byte</td><td>10,2 GB (+ liên kết đồ thị nếu dùng HNSW)</td></tr>
+<tr><td>Vector nhị phân</td><td>10⁷ × 1.024 / 8 byte</td><td>1,3 GB</td></tr>
+<tr><td>PQ 64 byte/vector (IVF-PQ)</td><td>10⁷ × 64 byte</td><td>0,64 GB mã nén (+ id, tâm cụm; + vector gốc trên đĩa nếu refine)</td></tr>
+<tr><td>Matryoshka cắt còn 256 chiều, float32</td><td>10⁷ × 256 × 4 byte</td><td>10,2 GB</td></tr>
+</tbody></table>
+<p>Hãy nhân thêm số replica (thường ≥ 2 để chịu lỗi) và để dư bộ nhớ cho xây lại chỉ mục. Đây là lý do chọn số chiều và kiểu dữ liệu cho embedding thường là quyết định chi phí lớn hơn chọn thuật toán chỉ mục.</p>
+
+<h2>Lọc metadata cùng ANN: chỗ hay bị bỏ qua</h2>
+<p>Hệ thống RAG thực tế hiếm khi tìm trên toàn kho. Người dùng chỉ được thấy tài liệu thuộc phòng ban mình, chỉ hỏi về văn bản còn hiệu lực, hoặc chỉ một dòng sản phẩm. Câu hỏi là: áp bộ lọc <em>trước</em>, <em>trong</em> hay <em>sau</em> khi tìm ANN?</p>
+<table>
+<thead><tr><th>Chiến lược</th><th>Cách làm</th><th>Vấn đề</th></tr></thead>
+<tbody>
+<tr><td>Lọc sau (post-filter)</td><td>Tìm top-k ANN rồi bỏ kết quả không khớp bộ lọc</td><td>Bộ lọc càng chặt, càng ít kết quả còn lại — có khi bằng 0 dù tài liệu phù hợp tồn tại</td></tr>
+<tr><td>Lọc trước (pre-filter) + tìm chính xác</td><td>Lấy tập khớp bộ lọc rồi brute-force trong đó</td><td>Rất tốt khi tập khớp nhỏ; chậm khi tập khớp lớn</td></tr>
+<tr><td>Lọc trong khi duyệt chỉ mục</td><td>Thuật toán ANN bỏ qua điểm không khớp nhưng tiếp tục duyệt cho tới khi đủ k</td><td>Với bộ lọc rất chặt, đồ thị bị “đứt” giữa các điểm khớp, phải duyệt rất nhiều</td></tr>
+<tr><td>Phân vùng chỉ mục</td><td>Mỗi giá trị lọc (ví dụ mỗi khách hàng/tenant) một chỉ mục hoặc partition riêng</td><td>Hiệu quả cho bộ lọc ít giá trị; khó khi lọc kết hợp nhiều trường</td></tr>
+</tbody></table>
+<div class="callout canh-bao">
+<p><strong>Ví dụ cụ thể từ tài liệu pgvector:</strong> với chỉ mục xấp xỉ, bộ lọc được áp <em>sau</em> khi quét chỉ mục; nếu điều kiện chỉ khớp 10% số dòng và <code>hnsw.ef_search</code> để mặc định 40, trung bình chỉ còn khoảng 4 dòng trả về[[cite:pgvector]]. Từ phiên bản 0.8.0, pgvector có <em>iterative index scan</em> tự quét thêm cho tới khi đủ kết quả (có giới hạn số tuple quét), và khuyên dùng partial index khi lọc theo ít giá trị, partitioning khi lọc theo nhiều giá trị khác nhau[[cite:pgvector]]. Hành vi này khác nhau giữa các hệ thống và phiên bản — hãy đọc tài liệu của công cụ bạn dùng và kiểm thử với bộ lọc chặt nhất có thể xảy ra.</p>
+</div>
+<p>Nghiên cứu cũng đang giải quyết vấn đề này ở tầng thuật toán: Filtered-DiskANN xây đồ thị dựa trên cả hình học vector lẫn tập nhãn của mỗi điểm, và báo cáo hiệu quả cao hơn một bậc trở lên cho truy vấn có lọc so với các phương pháp trước đó trên dữ liệu thực tế có nhãn[[cite:gollapudi2023]].</p>
+<p>Khi bộ lọc là <strong>quyền truy cập</strong>, lỗi không chỉ là chất lượng mà là bảo mật: lọc sai có thể làm lộ tài liệu. Bộ lọc quyền nên được áp ở tầng truy hồi, bắt buộc, không phụ thuộc vào LLM — xem [[link:van-hanh/bao-mat]] và cách thiết kế metadata ở [[link:du-lieu/metadata-va-bieu-dien]].</p>
+
+<h2>Đọc benchmark ANN đúng cách</h2>
+<p>ANN-Benchmarks là khung so sánh mở các thuật toán ANN trong bộ nhớ, vẽ đường cong recall theo số truy vấn/giây trên các bộ dữ liệu chuẩn bằng cách quét nhiều cấu hình tham số[[cite:aumuller2018]]. Một kết luận đáng nhớ của nhóm tác giả: những cách tiếp cận rất khác nhau có thể cho đánh đổi chất lượng–hiệu năng tương đương nhau[[cite:aumuller2018]].</p>
+<div class="callout kinh-nghiem">
+<p>Khi đọc bất kỳ benchmark vector nào (kể cả của nhà cung cấp), hãy hỏi: bộ dữ liệu nào, bao nhiêu chiều, recall ở mức nào, một luồng hay nhiều luồng, có bộ lọc không, có tính thời gian xây chỉ mục và bộ nhớ không, cấu hình có được tinh chỉnh công bằng cho mọi đối thủ không? Bộ dữ liệu như SIFT hay GloVe có phân phối khác embedding văn bản tiếng Việt của bạn. Benchmark chỉ để khoanh vùng; con số quyết định là đo trên dữ liệu và mẫu truy vấn của bạn.</p>
+</div>
+
+<h2>Chọn hạ tầng: thư viện, Postgres, search engine hay vector database?</h2>
+<p>Bảng dưới đây so sánh <em>loại</em> hạ tầng chứ không xếp hạng sản phẩm. Mỗi loại có nhiều lựa chọn mã nguồn mở và thương mại; tính năng thay đổi nhanh, nên kiểm tra tài liệu chính thức tại thời điểm bạn quyết định (bảng phản ánh hiểu biết tính đến 10/2026).</p>
+<table>
+<thead><tr><th>Loại</th><th>Ví dụ</th><th>Phù hợp khi</th><th>Điểm mạnh</th><th>Cần cân nhắc</th></tr></thead>
+<tbody>
+<tr><td>Thư viện trong tiến trình</td><td>Faiss[[cite:douze2024]], hnswlib</td><td>Thử nghiệm, xử lý batch, dữ liệu ít thay đổi, cần kiểm soát tối đa thuật toán</td><td>Nhanh, nhiều loại chỉ mục, không thêm dịch vụ</td><td>Tự lo lưu trữ bền, cập nhật, xóa, lọc metadata, phân quyền, mở rộng nhiều máy</td></tr>
+<tr><td>CSDL quan hệ có vector</td><td>PostgreSQL + pgvector</td><td>Đã vận hành Postgres; metadata, phân quyền nằm trong SQL; quy mô vừa</td><td>Giao dịch, JOIN, sao lưu quen thuộc; một nguồn dữ liệu duy nhất</td><td>Giới hạn số chiều khi đánh chỉ mục (2.000 với <code>vector</code>, 4.000 với <code>halfvec</code>)[[cite:pgvector]]; tải vector cạnh tranh tài nguyên với tải giao dịch</td></tr>
+<tr><td>Search engine có vector</td><td>Elasticsearch, OpenSearch</td><td>Cần BM25 + vector + bộ lọc trong cùng truy vấn (hybrid); đã có hạ tầng tìm kiếm</td><td>Analyzer ngôn ngữ, tìm từ khóa trưởng thành, hybrid sẵn</td><td>Vận hành cụm phức tạp; bộ nhớ cho chỉ mục vector cần quy hoạch</td></tr>
+<tr><td>Vector database chuyên dụng</td><td>Nhiều sản phẩm mã nguồn mở và dịch vụ quản lý</td><td>Quy mô lớn, nhiều tenant, vector là truy vấn chính, cần tính năng vector nâng cao</td><td>Tối ưu riêng cho vector: nén, lọc, mở rộng ngang</td><td>Thêm một hệ thống cần đồng bộ dữ liệu với nguồn gốc; mức độ hỗ trợ tìm từ khóa khác nhau; rủi ro phụ thuộc nhà cung cấp</td></tr>
+</tbody></table>
+
+<div class="callout nhan-dinh">
+<p>Theo nhận định của người biên soạn: với một đội đang bắt đầu RAG ở quy mô dưới vài triệu chunk, câu hỏi “hệ thống nào bạn đã vận hành thành thạo?” quan trọng hơn “hệ thống nào nhanh nhất trên benchmark?”. Độ trễ của tìm vector thường chỉ là một phần nhỏ so với embedding truy vấn, reranking và sinh câu trả lời (xem [[link:van-hanh/chi-phi-do-tre]]). Thêm một cơ sở dữ liệu mới đồng nghĩa thêm một nơi dữ liệu có thể lệch pha với nguồn gốc và một nơi phải phân quyền. Nhận định này cần được đối chiếu với yêu cầu cụ thể của bạn.</p>
+</div>
+
+<h2>Những lỗi thường gặp</h2>
+<details class="qa"><summary>Kết quả truy hồi “tự nhiên” kém đi sau vài tháng, không ai đổi gì</summary>
+<p>Có thể là chỉ mục IVF được huấn luyện trên dữ liệu cũ trong khi phân phối dữ liệu đã thay đổi, hoặc nhiều vector bị đánh dấu xóa làm đồ thị HNSW kém dần. Theo dõi recall ANN định kỳ bằng cách so một mẫu truy vấn với tìm kiếm chính xác, và lên lịch xây lại chỉ mục.</p></details>
+<details class="qa"><summary>Thêm bộ lọc theo phòng ban thì nhiều câu hỏi trả về rỗng</summary>
+<p>Gần như chắc chắn là vấn đề post-filter: ANN lấy top-k trên toàn kho rồi mới lọc. Tăng số ứng viên, bật cơ chế quét lặp nếu công cụ hỗ trợ, hoặc phân vùng chỉ mục theo phòng ban.</p></details>
+<details class="qa"><summary>Đặt <code>efSearch</code> rất cao cho chắc, sao độ trễ p99 tăng vọt?</summary>
+<p>Chi phí tìm kiếm tăng theo efSearch. Hãy vẽ đường cong recall ANN theo efSearch trên mẫu truy vấn của bạn và chọn điểm “gãy” — nơi tăng thêm không còn cải thiện đáng kể. Recall ANN 99,9% hiếm khi cần thiết nếu sau đó có bước rerank (xem [[link:tim-kiem/reranking]]).</p></details>
+<details class="qa"><summary>Đổi metric từ cosine sang dot product “cho nhanh”</summary>
+<p>Chỉ an toàn khi mọi vector đã được chuẩn hóa về độ dài 1. Nếu không, xếp hạng sẽ thay đổi (xem ví dụ số ở [[link:truy-hoi/embedding]]). Metric của chỉ mục phải khớp với metric mô hình được huấn luyện.</p></details>
+
+<h2>Tự kiểm tra hiểu biết</h2>
+<div class="callout kiem-chung">
+<ol>
+<li>Kho 2 triệu chunk, embedding 768 chiều float32, HNSW với M = 16 theo công thức Faiss. Bộ nhớ xấp xỉ bao nhiêu? (Đáp án: 2×10⁶ × (768×4 + 16×2×4) = 2×10⁶ × 3.200 byte ≈ 6,4 GB.)</li>
+<li>Phân biệt recall của chỉ mục ANN với Recall@k trong đánh giá truy hồi. Cái nào cần nhãn của con người?</li>
+<li>Trong ba tham số HNSW, tham số nào chỉnh được mà không cần xây lại chỉ mục?</li>
+<li>Với mã PQ 32 byte cho vector 1024 chiều float32, tỷ lệ nén là bao nhiêu? (Đáp án: 4.096 / 32 = 128 lần.)</li>
+<li>Thử nghiệm: lấy 200 truy vấn, chạy tìm kiếm chính xác và ANN với efSearch = 10, 20, 40, 80, 160; vẽ recall ANN@10 và độ trễ p95. Điểm nào bạn chọn, vì sao?</li>
+</ol>
+</div>
+
+<h2>Đọc tiếp</h2>
+<ul>
+<li>Bài tiếp theo: [[link:tim-kiem/hybrid-search]] — vì sao vẫn cần BM25 khi đã có vector, và cách hợp nhất hai danh sách kết quả.</li>
+<li>Bài trước: [[link:truy-hoi/embedding]] — nguồn gốc của các vector, số chiều và lượng tử hóa.</li>
+<li>Phân quyền và lọc an toàn: [[link:van-hanh/bao-mat]]; chi phí hạ tầng: [[link:van-hanh/chi-phi-do-tre]].</li>
+<li>Tài liệu gốc: HNSW[[cite:malkov2016]], Product Quantization[[cite:jegou2011]], Faiss[[cite:johnson2017,douze2024]], DiskANN[[cite:subramanya2019]]; hướng dẫn thực dụng: Faiss wiki[[cite:faisswiki]] và README pgvector[[cite:pgvector]].</li>
+</ul>

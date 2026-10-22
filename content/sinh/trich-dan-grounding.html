@@ -1,0 +1,180 @@
+---
+{
+  "title": "Trích dẫn và grounding: làm sao để mỗi nhận định kiểm chứng được?",
+  "navTitle": "Trích dẫn & grounding",
+  "description": "Grounded và faithful nghĩa là gì, các định dạng trích dẫn, cách đo citation recall/precision theo ALCE, kiểm tra trích dẫn tự động, cách để mô hình nói “không đủ thông tin”, và cách hiển thị nguồn trên giao diện.",
+  "lead": "Một câu trả lời RAG có số [1], [2] trông rất đáng tin. Nhưng nghiên cứu về các công cụ tìm kiếm tạo sinh cho thấy một phần đáng kể trích dẫn không thật sự ủng hộ câu đi kèm. Bài này giải thích thế nào là bám nguồn, cách thiết kế trích dẫn để kiểm chứng được, cách đo và tự động kiểm tra chúng, và khi nào hệ thống nên từ chối trả lời.",
+  "level": "Trung cấp",
+  "reviewed": "2026-10-22",
+  "kinds": ["nen-tang", "nghien-cuu", "kinh-nghiem", "nhan-dinh"]
+}
+---
+<div class="callout tom-tat">
+<ul>
+<li><strong>Grounded / faithful</strong> (bám nguồn / trung thực): mọi nhận định trong câu trả lời đều suy ra được từ tài liệu đã cung cấp. Khác với <em>đúng</em>: câu trả lời có thể bám một tài liệu sai, hoặc đúng nhưng không có căn cứ.</li>
+<li>Trích dẫn có hai thước đo: <strong>citation recall</strong> (nhận định nào cũng được nguồn hỗ trợ?) và <strong>citation precision</strong> (nguồn nào được dẫn cũng thật sự hỗ trợ?). Benchmark ALCE đo cả hai tự động bằng mô hình NLI.</li>
+<li>“Có trích dẫn” không có nghĩa “trích dẫn đúng”: đánh giá năm 2023 trên bốn công cụ tìm kiếm tạo sinh ghi nhận chỉ khoảng một nửa số câu được trích dẫn hỗ trợ đầy đủ.</li>
+<li>Kiểm tra trích dẫn nên nhiều lớp: mã nguồn tồn tại → trích nguyên văn khớp → mô hình suy diễn (NLI) xác nhận → người kiểm tra mẫu.</li>
+<li>Từ chối trả lời đúng lúc là một tính năng, cần được thiết kế và đo như mọi tính năng khác.</li>
+</ul>
+</div>
+
+<h2>Vấn đề: trích dẫn trông đáng tin hơn thực tế</h2>
+<p>Lý do lớn để dùng RAG là truy nguồn được (xem [[link:nen-tang/rag-la-gi]]). Nhưng chỉ dẫn số [1] sau một câu không tự động làm câu đó đúng. Mô hình có thể gắn số trích dẫn vào câu nó tự suy diễn, dẫn một tài liệu cùng chủ đề nhưng không chứa thông tin đó, hoặc dẫn đúng tài liệu nhưng diễn giải sai.</p>
+<div class="callout nghien-cuu">
+<p>Liu, Zhang và Liang (2023) đánh giá thủ công bốn công cụ tìm kiếm tạo sinh phổ biến thời điểm đó (Bing Chat, NeevaAI, perplexity.ai, YouChat) trên nhiều loại câu hỏi. Trung bình chỉ 51,5% câu được sinh ra có trích dẫn hỗ trợ đầy đủ, và chỉ 74,5% trích dẫn thật sự ủng hộ câu mà nó đi kèm. Các tác giả lưu ý câu trả lời trôi chảy và có vẻ nhiều thông tin, tạo ra “vẻ ngoài đáng tin”[[cite:liu2023verifiability]]. Đây là các sản phẩm năm 2023; con số không mô tả hệ thống hiện nay, nhưng chỉ ra rằng chất lượng trích dẫn phải được đo, không thể giả định.</p>
+</div>
+<p>Hệ quả cho người xây hệ thống: trích dẫn là một <em>đầu ra cần kiểm thử</em>, giống như câu trả lời. Phần còn lại của bài đi từ định nghĩa, qua thiết kế, tới đo lường và giao diện.</p>
+
+<h2>Grounded, faithful và correct: ba khái niệm khác nhau</h2>
+<div class="callout nen-tang">
+<p><strong>Faithfulness / groundedness</strong> (độ trung thực / bám nguồn) là quan hệ giữa <em>câu trả lời</em> và <em>ngữ cảnh được cung cấp</em>: mọi nhận định có suy ra được từ ngữ cảnh không. <strong>Correctness</strong> (độ đúng) là quan hệ giữa câu trả lời và <em>sự thật</em> (thường đại diện bằng đáp án tham chiếu). <strong>Attribution</strong> (quy nguồn) là việc chỉ ra cụ thể đoạn nào hỗ trợ nhận định nào. ALCE đánh giá trích dẫn theo khung AIS — một nhận định được coi là quy nguồn được nếu các đoạn được dẫn <em>kéo theo</em> (entail) nó[[cite:gao2023alce]].</p>
+</div>
+<table>
+<thead><tr><th></th><th>Bám ngữ cảnh</th><th>Không bám ngữ cảnh</th></tr></thead>
+<tbody>
+<tr><td><strong>Đúng với thực tế</strong></td><td>✅ Trường hợp mong muốn</td><td>⚠️ Đúng “nhờ may” hoặc nhờ trí nhớ mô hình — không kiểm chứng được, dễ sai khi dữ liệu thay đổi</td></tr>
+<tr><td><strong>Sai với thực tế</strong></td><td>⚠️ Lỗi dữ liệu hoặc truy hồi: tài liệu cũ, sai, hoặc nhầm đối tượng</td><td>❌ Hallucination điển hình</td></tr>
+</tbody>
+</table>
+<p>Bảng này quan trọng khi chẩn đoán. Ô “bám ngữ cảnh nhưng sai” không sửa được bằng prompt — phải sửa dữ liệu hoặc truy hồi. Ô “đúng nhưng không bám” là lỗi tiềm ẩn: bộ kiểm thử dựa trên đáp án sẽ cho điểm cao, nhưng hệ thống đang dựa vào trí nhớ mô hình chứ không phải tài liệu của bạn. Cách đo từng ô được trình bày ở [[link:danh-gia/danh-gia-generation]].</p>
+
+<h2>Thiết kế định dạng trích dẫn</h2>
+<p>Có nhiều cách để mô hình chỉ ra nguồn. Lựa chọn ảnh hưởng tới cả độ dễ kiểm tra tự động lẫn trải nghiệm đọc.</p>
+<table>
+<thead><tr><th>Định dạng</th><th>Ví dụ</th><th>Ưu điểm</th><th>Nhược điểm</th></tr></thead>
+<tbody>
+<tr><td>Mã nguồn sau mỗi câu</td><td>“Pin được bảo hành 6 tháng [D3].”</td><td>Đơn giản, quen thuộc, dễ đo theo câu</td><td>Không chỉ ra câu nào trong tài liệu; một tài liệu dài vẫn khó kiểm</td></tr>
+<tr><td>Trích nguyên văn (quote span)</td><td>“Pin được bảo hành 6 tháng [D3: ‘pin và sạc được bảo hành 06 tháng’].”</td><td>Kiểm tra được bằng so khớp chuỗi; người đọc thấy ngay căn cứ</td><td>Tốn token; mô hình đôi khi “trích” câu không tồn tại — chính điều cần kiểm</td></tr>
+<tr><td>Đầu ra có cấu trúc (JSON)</td><td><code>{"claim": "...", "sources": ["D3"], "quote": "..."}</code></td><td>Dễ xử lý hậu kỳ, dựng giao diện tùy ý</td><td>Phụ thuộc khả năng sinh JSON hợp lệ; câu trả lời kém tự nhiên nếu không ghép lại</td></tr>
+<tr><td>Trích dẫn theo đoạn văn</td><td>Một khối văn kèm “Nguồn: D1, D3”</td><td>Đọc trôi chảy</td><td>Không biết nguồn nào hỗ trợ câu nào; khó đo precision</td></tr>
+</tbody>
+</table>
+<div class="callout kinh-nghiem">
+<p>Thực hành phổ biến là kết hợp: yêu cầu mô hình ghi mã nguồn sau mỗi câu có thông tin từ tài liệu, và với các nhận định quan trọng (con số, thời hạn, điều kiện) thì kèm trích nguyên văn ngắn. Nhiều hệ thống cũng yêu cầu mô hình trích các đoạn liên quan <em>trước</em> khi viết câu trả lời — một kỹ thuật được hướng dẫn prompt của Anthropic khuyến nghị cho tác vụ tài liệu dài[[cite:anthropic2026prompting]]. Cách làm này tốn thêm token đầu ra; hãy đo xem nó có cải thiện faithfulness trên dữ liệu của bạn không.</p>
+</div>
+<p>Mã nguồn nên ngắn và do hệ thống gán khi [[link:sinh/xay-dung-context|ghép ngữ cảnh]] (D1, D2…), sau đó ánh xạ ngược về tài liệu thật. Mã dài như đường dẫn file hay UUID dễ bị mô hình chép sai một ký tự.</p>
+
+<h2>Đo chất lượng trích dẫn: citation recall và precision</h2>
+<div class="callout nghien-cuu">
+<p><strong>ALCE</strong> (Gao, Yen, Yu, Chen — EMNLP 2023) là benchmark đầu tiên đánh giá tự động việc LLM sinh văn bản có trích dẫn. Hệ thống phải tự truy hồi bằng chứng và viết câu trả lời có trích dẫn, trên ba bộ dữ liệu: ASQA và QAMPARI (trên Wikipedia), ELI5 (trên kho web lọc từ Common Crawl), cắt thành đoạn 100 từ[[cite:gao2023alce]].</p>
+<ul>
+<li><strong>Citation recall</strong> của một câu = 1 nếu câu có ít nhất một trích dẫn và <em>ghép các đoạn được dẫn</em> lại thì kéo theo câu đó; lấy trung bình trên các câu.</li>
+<li><strong>Citation precision</strong> của một trích dẫn = 0 nếu nó “thừa”: tự nó không hỗ trợ câu, <em>và</em> bỏ nó đi thì các trích dẫn còn lại vẫn hỗ trợ đủ. Trích dẫn chỉ được tính 1 khi câu của nó có recall bằng 1.</li>
+<li>Phán định “kéo theo” do mô hình NLI TRUE (T5-11B fine-tune trên nhiều bộ NLI) thực hiện. So với nhãn người, độ chính xác khoảng 85% cho recall và 78% cho precision; hệ số kappa 0,698 và 0,525. Mỗi câu được dẫn tối đa 3 đoạn.</li>
+<li>Kết quả: trên ELI5, ngay cả mô hình tốt nhất cũng thiếu hỗ trợ trích dẫn đầy đủ khoảng 50% số lần.</li>
+</ul>
+<p>Giới hạn tác giả nêu: chỉ số không nhận ra hỗ trợ <em>một phần</em>, nên có thể phạt oan precision. Các mô hình được thử là của năm 2023.</p>
+</div>
+
+<h3>Ví dụ tính tay</h3>
+<p>Ngữ cảnh gồm ba tài liệu về chính sách bảo hành của một cửa hàng điện thoại:</p>
+<ul>
+<li><strong>[D1]</strong> “Điện thoại chính hãng được bảo hành 12 tháng kể từ ngày mua.”</li>
+<li><strong>[D2]</strong> “Hư hỏng do rơi vỡ, vào nước hoặc tác động vật lý không thuộc phạm vi bảo hành.”</li>
+<li><strong>[D3]</strong> “Pin và bộ sạc đi kèm được bảo hành 06 tháng.”</li>
+</ul>
+<p>Câu trả lời của hệ thống gồm bốn câu:</p>
+<table>
+<thead><tr><th>Câu</th><th>Trích dẫn</th><th>Recall câu</th><th>Precision từng trích dẫn</th></tr></thead>
+<tbody>
+<tr><td>S1. Điện thoại được bảo hành 12 tháng.</td><td>[D1]</td><td>1 — D1 kéo theo S1</td><td>D1: 1</td></tr>
+<tr><td>S2. Pin được bảo hành 6 tháng.</td><td>[D1][D3]</td><td>1 — D1+D3 kéo theo S2</td><td>D1: 0 (tự nó không hỗ trợ, bỏ đi thì D3 vẫn đủ) · D3: 1</td></tr>
+<tr><td>S3. Màn hình vỡ do rơi không được bảo hành.</td><td>[D2]</td><td>1</td><td>D2: 1</td></tr>
+<tr><td>S4. Khách được đổi máy mới trong 30 ngày đầu.</td><td>(không có)</td><td>0 — không có trích dẫn, và cũng không tài liệu nào nói vậy</td><td>—</td></tr>
+</tbody>
+</table>
+<p>Citation recall = (1 + 1 + 1 + 0) / 4 = <strong>0,75</strong>. Citation precision = (1 + 0 + 1 + 1) / 4 trích dẫn = <strong>0,75</strong>. Câu S4 là lỗi nghiêm trọng nhất — một chính sách bịa ra — dù về mặt con số nó chỉ kéo recall xuống một phần tư. Vì vậy ngoài chỉ số tổng hợp, nên đếm riêng số câu trả lời có <em>ít nhất một</em> nhận định không được hỗ trợ.</p>
+
+<h2>Ví dụ: trích dẫn tốt và trích dẫn xấu</h2>
+<p>Câu hỏi: <em>“Tôi làm rơi điện thoại mua được 3 tháng, màn hình bị nứt, có được bảo hành miễn phí không?”</em> Cùng ngữ cảnh D1–D3 như trên.</p>
+<table>
+<thead><tr><th></th><th>Câu trả lời</th><th>Đánh giá</th></tr></thead>
+<tbody>
+<tr><td><strong>Tốt</strong></td><td>“Trường hợp của bạn không được bảo hành miễn phí. Dù máy còn trong thời hạn bảo hành 12 tháng [D1], hư hỏng do rơi vỡ không thuộc phạm vi bảo hành [D2: ‘Hư hỏng do rơi vỡ… không thuộc phạm vi bảo hành’]. Tài liệu hiện có không nêu chi phí sửa màn hình; bạn nên liên hệ trung tâm bảo hành để được báo giá.”</td><td>Mỗi nhận định có nguồn hỗ trợ; trích nguyên văn ở điểm quyết định; nói rõ phần tài liệu không có thay vì đoán giá.</td></tr>
+<tr><td><strong>Xấu</strong></td><td>“Bạn được bảo hành vì máy còn trong 12 tháng [D1]. Tuy nhiên với lỗi màn hình, bạn có thể phải trả 30% chi phí [D2].”</td><td>Câu 1 dẫn D1 đúng tài liệu nhưng kết luận sai vì bỏ qua D2. Câu 2 có trích dẫn nhưng D2 không hề nhắc “30%” — đây là trường hợp <strong>có trích dẫn mà không hỗ trợ</strong>, nguy hiểm nhất vì người dùng tin rằng con số nằm trong quy định.</td></tr>
+</tbody>
+</table>
+<p>Chấm theo cách của ALCE: ở câu 1, D1 kéo theo vế “máy còn trong 12 tháng” nhưng không kéo theo kết luận “bạn được bảo hành”, nên câu không được hỗ trợ đầy đủ; câu 2 hiển nhiên không được hỗ trợ. Citation recall và precision của câu trả lời xấu đều bằng 0. Trong khi đó, một bộ kiểm tra chỉ đếm “mỗi câu có trích dẫn không” sẽ cho nó điểm tuyệt đối — minh họa vì sao phải kiểm tra <em>nội dung</em> trích dẫn chứ không chỉ sự có mặt.</p>
+
+<h2>Kiểm tra trích dẫn tự động</h2>
+<p>Có thể kiểm tra trích dẫn ngay trong pipeline (trước khi trả cho người dùng) hoặc ngoại tuyến (trong bộ kiểm thử). Các lớp kiểm tra từ rẻ tới đắt:</p>
+<ol class="steps">
+<li><strong>Kiểm tra cấu trúc</strong>: mọi mã [Dn] có tồn tại trong ngữ cảnh không; câu nào chứa con số, ngày tháng, tên riêng mà không có trích dẫn. Chạy bằng biểu thức chính quy, gần như miễn phí.</li>
+<li><strong>So khớp trích nguyên văn</strong>: nếu yêu cầu quote span, kiểm tra chuỗi trích có thực sự xuất hiện trong tài liệu được dẫn. Với tiếng Việt, cần <em>chuẩn hóa Unicode</em> (NFC) trước khi so, vì cùng một chữ có dấu có thể được mã hóa theo hai cách; cũng nên chuẩn hóa khoảng trắng, dấu ngoặc kép và cho phép sai khác nhỏ (fuzzy match) nếu tài liệu gốc trích từ PDF.</li>
+<li><strong>Kiểm tra suy diễn (entailment)</strong>: dùng mô hình NLI hoặc một LLM giám khảo để hỏi, với từng cặp (câu, đoạn được dẫn), “đoạn này có hỗ trợ câu này không?”. Đây là cách ALCE đo recall/precision[[cite:gao2023alce]], và cũng là cách RAGAS tính faithfulness: tách câu trả lời thành nhận định, kiểm từng nhận định với ngữ cảnh[[cite:es2023ragas,ragas2025faith]].</li>
+<li><strong>Người kiểm tra mẫu</strong>: lấy mẫu định kỳ để đo độ chính xác của chính bộ kiểm tra tự động (xem [[link:danh-gia/danh-gia-generation]]).</li>
+</ol>
+<div class="callout nhan-dinh">
+<p>Với tiếng Việt, chúng tôi khuyên đừng mặc định tin một mô hình NLI hay LLM giám khảo chỉ vì nó tốt trên benchmark tiếng Anh. Mô hình TRUE mà ALCE dùng được đánh giá trên dữ liệu tiếng Anh. Trước khi dùng bộ kiểm tra suy diễn nào cho tiếng Việt, hãy gán nhãn tay 100–200 cặp (câu, đoạn) từ chính dữ liệu của bạn và đo mức đồng thuận. Con số 100–200 là ước lượng thực hành để có ước lượng thô, không phải chuẩn thống kê.</p>
+</div>
+<p>Khi kiểm tra trực tuyến phát hiện vấn đề, hệ thống có thể: xóa câu không được hỗ trợ, sinh lại với chỉ dẫn chặt hơn, gắn cảnh báo “chưa xác minh” lên câu đó, hoặc chuyển sang câu từ chối. Mỗi lựa chọn có chi phí độ trễ khác nhau (xem [[link:van-hanh/chi-phi-do-tre]]).</p>
+
+<h2>Khi nào nên nói “không đủ thông tin”</h2>
+<p><strong>Abstention</strong> (từ chối trả lời) là hành vi đúng khi câu trả lời không nằm trong tài liệu. Barnett và cộng sự xếp đây là điểm lỗi đầu tiên trong bảy điểm lỗi của RAG: nội dung không có trong kho nhưng hệ thống vẫn bị “lừa” để đưa ra câu trả lời[[cite:barnett2024]].</p>
+<table>
+<thead><tr><th></th><th>Hệ thống trả lời</th><th>Hệ thống từ chối</th></tr></thead>
+<tbody>
+<tr><td><strong>Tài liệu có đáp án</strong></td><td>✅ Đúng (nếu nội dung đúng)</td><td>⚠️ Từ chối thừa — người dùng mất niềm tin, chuyển sang kênh khác</td></tr>
+<tr><td><strong>Tài liệu không có đáp án</strong></td><td>❌ Bịa — rủi ro cao nhất</td><td>✅ Đúng</td></tr>
+</tbody>
+</table>
+<p>Hai lỗi ở hai góc bảng kéo ngược nhau: siết quy tắc thì giảm bịa nhưng tăng từ chối thừa. Vì vậy bộ kiểm thử phải có cả câu <em>không trả lời được</em> (ví dụ 10–20% số câu, tùy ứng dụng), và báo cáo riêng hai tỷ lệ này. Một vài thực hành giúp từ chối tốt hơn:</p>
+<ul>
+<li><strong>Viết cố định câu từ chối</strong> trong prompt (“Tôi không tìm thấy thông tin này trong tài liệu hiện có.”) để đo và để giao diện nhận biết.</li>
+<li><strong>Cho phép trả lời một phần</strong>: “Tài liệu nêu thời hạn bảo hành nhưng không nêu chi phí sửa chữa.” thường hữu ích hơn từ chối toàn bộ.</li>
+<li><strong>Tín hiệu từ truy hồi</strong>: nếu điểm reranker của mọi đoạn đều thấp, có thể từ chối trước khi gọi LLM. Ngưỡng phải được hiệu chỉnh trên dữ liệu thật.</li>
+<li><strong>Gợi ý bước tiếp theo</strong>: kênh liên hệ, từ khóa khác, tài liệu gần nhất — biến lời từ chối thành một câu trả lời có ích.</li>
+</ul>
+
+<h2>Self-RAG: để mô hình tự phê bình</h2>
+<div class="callout nghien-cuu">
+<p>Thay vì kiểm tra trích dẫn bằng một bước riêng, Self-RAG (Asai và cộng sự, ICLR 2024) huấn luyện một mô hình sinh thêm các <strong>reflection token</strong> (token tự phản tư): một loại quyết định có cần truy hồi không, các loại khác đánh giá đoạn truy hồi có liên quan không, đoạn sinh ra có được đoạn truy hồi hỗ trợ không, và câu trả lời có hữu ích không. Nhờ đó có thể điều chỉnh hành vi lúc suy luận. Các tác giả báo cáo phiên bản 7B và 13B vượt ChatGPT và Llama2-chat có truy hồi trên một số tác vụ QA, suy luận và kiểm chứng sự kiện, đồng thời cải thiện độ chính xác trích dẫn khi sinh văn bản dài[[cite:asai2023selfrag]].</p>
+</div>
+<p>Điểm cần nhớ: Self-RAG đòi hỏi <em>huấn luyện</em> mô hình, nên không áp dụng trực tiếp cho một LLM gọi qua API. Ý tưởng của nó — tách “liên quan”, “được hỗ trợ”, “hữu ích” thành các phán định riêng — lại rất đáng mượn cho thiết kế bộ kiểm tra và rubric chấm điểm. Các hướng để mô hình tự quyết định truy hồi được bàn ở [[link:nang-cao/agentic-graphrag]].</p>
+
+<h2>Hiển thị nguồn trên giao diện</h2>
+<p>Trích dẫn chỉ có giá trị khi người dùng <em>thực sự kiểm được</em>. Một số mẫu giao diện hữu ích:</p>
+<ul>
+<li><strong>Số trích dẫn bấm được</strong>, mở ra đoạn nguồn với phần liên quan được tô sáng — không chỉ mở cả tài liệu 80 trang.</li>
+<li><strong>Thẻ nguồn</strong> ghi tiêu đề, mục/điều khoản, ngày hiệu lực, phiên bản. Với văn bản pháp lý hay biểu phí, ngày hiệu lực quan trọng ngang nội dung.</li>
+<li><strong>Liên kết sâu</strong> tới đúng trang PDF hoặc neo trong trang web, nhờ metadata vị trí lưu từ lúc chunking (xem [[link:du-lieu/metadata-va-bieu-dien]]).</li>
+<li><strong>Đánh dấu câu chưa xác minh</strong> nếu bộ kiểm tra trực tuyến không xác nhận được, thay vì lặng lẽ hiển thị như mọi câu khác.</li>
+<li><strong>Phân biệt trích nguyên văn và diễn giải</strong>: đặt trích nguyên văn trong dấu ngoặc kép hoặc khối trích dẫn.</li>
+<li><strong>Trên điện thoại</strong>: mở nguồn dạng ngăn trượt (bottom sheet) thay vì tooltip khi rê chuột; vùng bấm của số trích dẫn đủ lớn.</li>
+<li><strong>Tôn trọng phân quyền</strong>: không hiển thị nguồn mà người dùng không có quyền xem, kể cả tiêu đề (xem [[link:van-hanh/bao-mat]]).</li>
+</ul>
+<div class="callout kinh-nghiem">
+<p>Một tín hiệu thực tế đáng theo dõi là tỷ lệ người dùng bấm vào trích dẫn và phản hồi “nguồn không khớp”. Nút báo lỗi ngay cạnh mỗi trích dẫn là cách rẻ để thu nhãn lỗi thật cho [[link:danh-gia/chan-doan-loi|phân tích lỗi]].</p>
+</div>
+
+<h2>Lỗi thường gặp</h2>
+<table>
+<thead><tr><th>Lỗi</th><th>Biểu hiện</th><th>Hướng xử lý</th></tr></thead>
+<tbody>
+<tr><td>Trích dẫn có mặt nhưng không hỗ trợ</td><td>Con số, điều kiện không có trong đoạn được dẫn</td><td>Kiểm tra entailment; yêu cầu quote span cho con số</td></tr>
+<tr><td>Trích dẫn “cho có”</td><td>Mọi câu đều dẫn [D1] dù thông tin nằm ở D3</td><td>Đo precision; ví dụ mẫu (few-shot) có trích dẫn đa dạng</td></tr>
+<tr><td>Mã không tồn tại</td><td>[D7] khi chỉ có 5 tài liệu</td><td>Kiểm tra cấu trúc; mã ngắn, liên tục</td></tr>
+<tr><td>Trích nguyên văn bị “sửa”</td><td>Quote gần đúng nhưng đổi con số hoặc bỏ “không”</td><td>So khớp chuỗi sau chuẩn hóa; cảnh giác với từ phủ định</td></tr>
+<tr><td>Bám tài liệu cũ</td><td>Trích dẫn đúng nhưng văn bản đã hết hiệu lực</td><td>Metadata hiệu lực, lọc khi truy hồi (xem [[link:sinh/xay-dung-context]])</td></tr>
+<tr><td>Từ chối thừa</td><td>“Không tìm thấy” dù đáp án ở top-3</td><td>Nới quy tắc, cho phép trả lời một phần; kiểm tra vị trí đoạn đúng trong ngữ cảnh</td></tr>
+</tbody>
+</table>
+
+<h2>Cách kiểm chứng</h2>
+<div class="callout kiem-chung">
+<ol>
+<li>Lấy 50 câu trả lời gần nhất. Với mỗi câu có trích dẫn, mở đoạn nguồn và tự hỏi: “đoạn này có nói đúng điều câu trả lời khẳng định không?”. Tính tay citation recall và precision như ví dụ ở trên.</li>
+<li>Chạy bộ kiểm tra tự động của bạn trên cùng 50 câu; so với nhãn tay. Nếu đồng thuận thấp, chưa nên dùng nó làm chỉ số chính.</li>
+<li>Thêm vào bộ kiểm thử ít nhất vài chục câu hỏi <em>không có đáp án trong kho</em>; đo tỷ lệ bịa.</li>
+<li>Thử “đầu độc” ngữ cảnh: sửa một con số trong tài liệu được dẫn. Câu trả lời có đổi theo không? Nếu không, mô hình đang dựa vào trí nhớ, không phải tài liệu.</li>
+</ol>
+</div>
+
+<h2>Đọc tiếp</h2>
+<ul>
+<li>Bài tiếp theo: [[link:danh-gia/do-luong-retrieval]] — đo xem bộ truy hồi có đưa đúng tài liệu vào ngữ cảnh không.</li>
+<li>Đo faithfulness, answer relevance và dùng LLM làm giám khảo: [[link:danh-gia/danh-gia-generation]].</li>
+<li>Bài trước, nền cho prompt có mã tài liệu: [[link:sinh/xay-dung-context]].</li>
+<li>Bài báo nên đọc: ALCE[[cite:gao2023alce]] cho cách đo trích dẫn; Liu et al. 2023[[cite:liu2023verifiability]] cho bằng chứng rằng trích dẫn cần được kiểm.</li>
+</ul>

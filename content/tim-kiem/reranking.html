@@ -1,0 +1,190 @@
+---
+{
+  "title": "Reranking: xếp hạng lại kết quả truy hồi bằng cơ chế nào và tốn bao nhiêu?",
+  "navTitle": "Reranking",
+  "description": "Truy hồi hai giai đoạn, khác biệt giữa bi-encoder, cross-encoder và late interaction (ColBERT), reranking bằng LLM theo kiểu listwise, cách tính ngân sách chi phí–độ trễ, chọn số ứng viên, đánh giá reranker và các lỗi thường gặp, kể cả với tiếng Việt.",
+  "lead": "Truy hồi giai đoạn đầu phải nhanh trên cả kho, nên nó dùng những mô hình “nhìn lướt”. Kết quả là tài liệu đúng thường nằm đâu đó trong top-50 nhưng không ở top-5 — mà prompt chỉ chứa được vài đoạn. Reranker đọc kỹ từng ứng viên cùng câu hỏi để sắp lại thứ tự. Bài này giải thích vì sao cách đó chính xác hơn, cái giá phải trả, và cách chọn cấu hình cho hệ thống của bạn.",
+  "level": "Trung cấp",
+  "reviewed": "2026-10-22",
+  "kinds": ["nen-tang", "nghien-cuu", "kinh-nghiem", "nhan-dinh"]
+}
+---
+<div class="callout tom-tat">
+<ul>
+<li><strong>Truy hồi hai giai đoạn</strong>: giai đoạn 1 (BM25, vector, hybrid) lấy nhanh N ứng viên từ cả kho; giai đoạn 2 (<strong>reranker</strong>) chấm kỹ N ứng viên đó và giữ lại k đoạn tốt nhất cho prompt.</li>
+<li><strong>Cross-encoder</strong> đọc câu hỏi và đoạn văn <em>cùng lúc</em>, nên nắm được tương tác chi tiết mà bi-encoder bỏ lỡ — đổi lại phải chạy một lượt mô hình cho mỗi cặp.</li>
+<li><strong>Late interaction</strong> (ColBERT) là điểm giữa: lưu vector cho từng token, so khớp chi tiết nhưng vẫn tính trước được phía tài liệu. <strong>LLM reranker</strong> mạnh và linh hoạt nhưng đắt và chậm nhất.</li>
+<li>Reranker chỉ sắp xếp lại những gì giai đoạn 1 đưa cho nó: <strong>Recall@N của giai đoạn 1 là trần</strong> của cả hệ thống. Chọn N bằng số đo, không bằng thói quen.</li>
+</ul>
+</div>
+
+<h2>Vấn đề: tài liệu đúng có trong top-50 nhưng không trong top-5</h2>
+<p>Giả sử khách hàng hỏi ngân hàng: <em>“Rút tiết kiệm trước hạn có được hưởng lãi không?”</em>. Hệ thống hybrid (xem [[link:tim-kiem/hybrid-search]]) trả về 50 chunk về “tiết kiệm”, “lãi suất”, “rút tiền”. Chunk trả lời đúng — “Trường hợp tất toán trước hạn, khách hàng được hưởng lãi suất không kỳ hạn…” — nằm ở hạng 14. Ở hạng 1–5 là các đoạn về biểu lãi suất theo kỳ hạn, chung rất nhiều từ với câu hỏi nhưng không trả lời nó.</p>
+<p>Vì sao? Bi-encoder nén cả đoạn văn thành <em>một</em> vector trước khi biết câu hỏi là gì (xem [[link:truy-hoi/embedding]]); BM25 chỉ đếm từ trùng. Cả hai đều không “đọc” xem đoạn văn có thực sự trả lời <em>câu hỏi này</em> không. Nếu chỉ đưa top-5 vào prompt, LLM sẽ không thấy đoạn đúng; nếu đưa cả 50, chi phí tăng và mô hình dễ bị phân tâm bởi các đoạn không liên quan[[cite:shi2023]] hoặc bỏ sót thông tin nằm giữa ngữ cảnh dài[[cite:liu2023lost]].</p>
+
+<figure class="diagram">
+<svg viewBox="0 0 740 260" width="740" role="img" aria-labelledby="rr1t rr1d">
+<title id="rr1t">Truy hồi hai giai đoạn</title>
+<desc id="rr1d">Kho một triệu chunk qua giai đoạn 1 truy hồi nhanh còn khoảng 50 ứng viên, qua giai đoạn 2 reranker chính xác còn khoảng 5 đoạn, sau đó đưa vào LLM. Càng về sau số đoạn càng ít nhưng chi phí xử lý mỗi đoạn càng cao.</desc>
+<defs><marker id="rrah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="arrowhead"/></marker></defs>
+<rect x="20" y="40" width="150" height="150" rx="10" class="box-v"/><text x="95" y="105" font-size="14" text-anchor="middle" font-weight="700">Kho</text><text x="95" y="125" font-size="12" text-anchor="middle" class="muted">~1.000.000 chunk</text>
+<rect x="220" y="60" width="150" height="110" rx="10" class="box"/><text x="295" y="98" font-size="14" text-anchor="middle" font-weight="700">Giai đoạn 1</text><text x="295" y="118" font-size="12" text-anchor="middle" class="muted">BM25 + vector</text><text x="295" y="136" font-size="12" text-anchor="middle" class="muted">→ ~50 ứng viên</text>
+<rect x="420" y="80" width="150" height="70" rx="10" class="box-a"/><text x="495" y="108" font-size="14" text-anchor="middle" font-weight="700">Reranker</text><text x="495" y="128" font-size="12" text-anchor="middle" class="muted">→ ~5 đoạn</text>
+<rect x="620" y="90" width="100" height="50" rx="10" class="box-w"/><text x="670" y="120" font-size="14" text-anchor="middle" font-weight="700">LLM</text>
+<path d="M170 115 H218" class="ln" marker-end="url(#rrah)"/>
+<path d="M370 115 H418" class="ln" marker-end="url(#rrah)"/>
+<path d="M570 115 H618" class="ln" marker-end="url(#rrah)"/>
+<text x="95" y="220" font-size="11.5" text-anchor="middle" class="muted">tính trước, offline</text>
+<text x="295" y="220" font-size="11.5" text-anchor="middle" class="muted">rẻ / đoạn, tối ưu recall</text>
+<text x="495" y="220" font-size="11.5" text-anchor="middle" class="muted">đắt / đoạn, tối ưu thứ tự</text>
+<text x="670" y="220" font-size="11.5" text-anchor="middle" class="muted">đắt nhất / token</text>
+<path d="M40 240 H700" class="ln-d" marker-end="url(#rrah)"/>
+<text x="370" y="256" font-size="11.5" text-anchor="middle" class="muted">số đoạn giảm dần · chi phí xử lý mỗi đoạn tăng dần (con số minh họa)</text>
+</svg>
+<figcaption>Truy hồi hai giai đoạn: mỗi tầng dùng mô hình đắt hơn trên tập nhỏ hơn.</figcaption>
+</figure>
+
+<h2>Ba cách chấm điểm một cặp (câu hỏi, đoạn văn)</h2>
+<figure class="diagram">
+<svg viewBox="0 0 740 280" width="740" role="img" aria-labelledby="rr2t rr2d">
+<title id="rr2t">So sánh bi-encoder, cross-encoder và late interaction</title>
+<desc id="rr2d">Bi-encoder: câu hỏi và đoạn văn đi qua hai bộ mã hóa riêng thành hai vector, so sánh bằng cosine. Cross-encoder: câu hỏi và đoạn văn được nối lại, đi qua một mô hình chung, xuất trực tiếp một điểm. Late interaction: mỗi token của câu hỏi và đoạn văn có vector riêng; với mỗi token câu hỏi lấy độ tương đồng lớn nhất với các token đoạn văn rồi cộng lại.</desc>
+<defs><marker id="rrah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="arrowhead"/></marker></defs>
+<text x="120" y="24" font-size="13" font-weight="700" text-anchor="middle">Bi-encoder</text>
+<rect x="30" y="40" width="80" height="34" rx="6" class="box-b"/><text x="70" y="62" font-size="12" text-anchor="middle">câu hỏi</text>
+<rect x="130" y="40" width="80" height="34" rx="6" class="box"/><text x="170" y="62" font-size="12" text-anchor="middle">đoạn văn</text>
+<rect x="30" y="100" width="80" height="40" rx="6" class="box-v"/><text x="70" y="124" font-size="12" text-anchor="middle">encoder</text>
+<rect x="130" y="100" width="80" height="40" rx="6" class="box-v"/><text x="170" y="124" font-size="12" text-anchor="middle">encoder</text>
+<rect x="45" y="166" width="50" height="22" rx="4" class="box"/><text x="70" y="182" font-size="11" text-anchor="middle">vector</text>
+<rect x="145" y="166" width="50" height="22" rx="4" class="box"/><text x="170" y="182" font-size="11" text-anchor="middle">vector</text>
+<rect x="80" y="216" width="80" height="34" rx="6" class="box-a"/><text x="120" y="238" font-size="12" text-anchor="middle">cosine</text>
+<path d="M70 74 V98M170 74 V98M70 140 V164M170 140 V164" class="ln" marker-end="url(#rrah2)"/>
+<path d="M70 188 L105 214M170 188 L135 214" class="ln" marker-end="url(#rrah2)"/>
+
+<text x="370" y="24" font-size="13" font-weight="700" text-anchor="middle">Cross-encoder</text>
+<rect x="290" y="40" width="160" height="34" rx="6" class="box-b"/><text x="370" y="62" font-size="12" text-anchor="middle">[câu hỏi ; đoạn văn]</text>
+<rect x="290" y="100" width="160" height="88" rx="6" class="box-v"/><text x="370" y="140" font-size="12" text-anchor="middle">Transformer</text><text x="370" y="158" font-size="11" text-anchor="middle" class="muted">attention qua lại</text>
+<rect x="330" y="216" width="80" height="34" rx="6" class="box-a"/><text x="370" y="238" font-size="12" text-anchor="middle">điểm</text>
+<path d="M370 74 V98M370 188 V214" class="ln" marker-end="url(#rrah2)"/>
+
+<text x="610" y="24" font-size="13" font-weight="700" text-anchor="middle">Late interaction (ColBERT)</text>
+<rect x="520" y="40" width="80" height="34" rx="6" class="box-b"/><text x="560" y="62" font-size="12" text-anchor="middle">câu hỏi</text>
+<rect x="620" y="40" width="80" height="34" rx="6" class="box"/><text x="660" y="62" font-size="12" text-anchor="middle">đoạn văn</text>
+<rect x="520" y="100" width="80" height="40" rx="6" class="box-v"/><text x="560" y="124" font-size="12" text-anchor="middle">encoder</text>
+<rect x="620" y="100" width="80" height="40" rx="6" class="box-v"/><text x="660" y="124" font-size="12" text-anchor="middle">encoder</text>
+<rect x="528" y="166" width="14" height="22" class="box"/><rect x="546" y="166" width="14" height="22" class="box"/><rect x="564" y="166" width="14" height="22" class="box"/>
+<rect x="622" y="166" width="12" height="22" class="box"/><rect x="638" y="166" width="12" height="22" class="box"/><rect x="654" y="166" width="12" height="22" class="box"/><rect x="670" y="166" width="12" height="22" class="box"/><rect x="686" y="166" width="12" height="22" class="box"/>
+<rect x="560" y="216" width="100" height="34" rx="6" class="box-a"/><text x="610" y="238" font-size="12" text-anchor="middle">Σ MaxSim</text>
+<path d="M560 74 V98M660 74 V98M560 140 V164M660 140 V164" class="ln" marker-end="url(#rrah2)"/>
+<path d="M553 188 L590 214M660 188 L630 214" class="ln" marker-end="url(#rrah2)"/>
+<text x="610" y="272" font-size="11" text-anchor="middle" class="muted">một vector cho mỗi token</text>
+</svg>
+<figcaption>Bi-encoder so sánh hai vector tóm tắt; cross-encoder đọc hai văn bản cùng lúc; late interaction so khớp ở mức token.</figcaption>
+</figure>
+
+<h3>Cross-encoder: đọc câu hỏi và đoạn văn cùng lúc</h3>
+<p>Cross-encoder nối câu hỏi và đoạn văn thành một chuỗi, đưa qua Transformer, và xuất một điểm liên quan. Vì cơ chế attention cho phép từng token của câu hỏi “nhìn” từng token của đoạn văn, mô hình nhận ra những chi tiết như “trước hạn” đi với “tất toán trước hạn” chứ không phải “kỳ hạn 12 tháng”. Điểm yếu cũng chính là điểm mạnh: không thể tính trước gì cho tài liệu, mỗi cặp cần một lượt chạy mô hình. Đó là lý do cross-encoder chỉ dùng cho danh sách ngắn — với toàn kho thì quá chậm, như phép tính 65 giờ cho 10.000 câu mà Sentence-BERT nêu[[cite:reimers2019]].</p>
+<div class="callout nghien-cuu">
+<p>Nogueira và Cho (2019) dùng BERT làm cross-encoder đơn giản để rerank đoạn văn (thường gọi là monoBERT): mô hình đứng đầu bảng xếp hạng MS MARCO passage retrieval lúc đó, hơn hệ thống tốt nhất trước đó 27% MRR@10 (tương đối), và đạt kết quả tốt nhất trên TREC-CAR[[cite:nogueira2019]]. Điều kiện: dữ liệu tiếng Anh, tìm kiếm web (MS MARCO), mô hình và phần cứng năm 2019. Kết quả này mở đầu làn sóng reranker dựa trên Transformer, nhưng mức cải thiện trên dữ liệu của bạn phải đo lại.</p>
+</div>
+<p>Một chi tiết thực tế: điểm của cross-encoder thường là <em>logit</em> không giới hạn. Model card của bge-reranker-v2-m3 cho ví dụ điểm thô −5,65, và tùy chọn đưa qua hàm sigmoid để được giá trị trong [0, 1] (≈ 0,0035 trong ví dụ đó)[[cite:bgererankercard]]. Giá trị sau sigmoid trông như xác suất nhưng chưa được hiệu chỉnh cho dữ liệu của bạn.</p>
+
+<h3>Late interaction: ColBERT</h3>
+<p>ColBERT mã hóa câu hỏi và đoạn văn <em>riêng rẽ</em> như bi-encoder, nhưng giữ lại một vector cho <em>mỗi token</em> thay vì gộp thành một. Điểm liên quan được tính bằng MaxSim:</p>
+<pre><code>score(q, d) = Σ   max   Eq[i] · Ed[j]
+              i∈q  j∈d
+(với mỗi token của câu hỏi, lấy token khớp nhất trong đoạn văn, rồi cộng lại)</code></pre>
+<div class="callout nghien-cuu">
+<p>Khattab và Zaharia (SIGIR 2020) báo cáo ColBERT đạt hiệu quả ngang các mô hình dựa trên BERT thời đó trên hai bộ dữ liệu tìm kiếm đoạn văn, trong khi nhanh hơn khoảng hai bậc độ lớn và cần ít hơn khoảng bốn bậc độ lớn FLOPs mỗi truy vấn; vì vector tài liệu tính trước được, ColBERT có thể dùng để truy hồi trực tiếp từ kho lớn chứ không chỉ rerank[[cite:khattab2020]]. Cái giá là dung lượng: một vector mỗi token làm kích thước chỉ mục tăng khoảng một bậc độ lớn; ColBERTv2 dùng nén residual và giám sát khử nhiễu để giảm dung lượng 6–10 lần mà vẫn giữ chất lượng cao trong và ngoài miền[[cite:santhanam2022]].</p>
+</div>
+<p>Để hình dung dung lượng: một đoạn 200 token, giả sử mỗi token một vector 128 chiều lưu ở 2 byte, cần 200 × 128 × 2 = 51.200 byte — khoảng 12 lần một embedding đơn 1024 chiều float32 (4.096 byte). Các con số giả định chỉ để minh họa bậc độ lớn. BGE-M3 cũng xuất được vector kiểu ColBERT bên cạnh vector dense và sparse[[cite:bgem3card]], nên có thể dùng late interaction như một bước rerank nhẹ mà không cần mô hình thứ hai.</p>
+
+<h3>LLM làm reranker</h3>
+<p>Có thể yêu cầu trực tiếp một LLM xếp hạng. Có ba kiểu: <strong>pointwise</strong> (hỏi “đoạn này có liên quan không, chấm 0–3”), <strong>pairwise</strong> (so từng cặp) và <strong>listwise</strong> (đưa cả danh sách, yêu cầu trả về thứ tự).</p>
+<div class="callout nghien-cuu">
+<p>RankGPT (Sun và cộng sự, EMNLP 2023) cho LLM như ChatGPT và GPT-4 sinh trực tiếp một <em>hoán vị</em> của các đoạn ứng viên. Tác giả báo cáo LLM được hướng dẫn đúng cách có thể cạnh tranh, thậm chí vượt các phương pháp có giám sát tốt nhất lúc đó; họ xây bộ NovelEval từ kiến thức mới để giảm lo ngại mô hình đã “thấy” dữ liệu kiểm thử, và chưng cất khả năng xếp hạng sang mô hình nhỏ: một mô hình 440 triệu tham số sau chưng cất vượt mô hình có giám sát 3 tỷ tham số trên BEIR[[cite:sun2023rankgpt]]. Để xếp nhiều đoạn hơn giới hạn ngữ cảnh, cấu hình tham chiếu trong mã nguồn rerank top-100 của BM25 bằng cửa sổ trượt 20 đoạn, bước 10, đi từ cuối danh sách lên đầu[[cite:rankgptcode]].</p>
+</div>
+<p>Tính nhanh chi phí của cấu hình đó: các cửa sổ bắt đầu ở vị trí 80, 70, …, 0 — tức <strong>9 lần gọi LLM</strong>, mỗi lần chứa 20 đoạn. Nếu mỗi đoạn khoảng 300 token, mỗi lần gọi khoảng 6.000 token đầu vào, tổng cộng khoảng 54.000 token cho <em>một</em> câu hỏi — trước khi bắt đầu sinh câu trả lời. Các cửa sổ lại phụ thuộc nhau (cửa sổ sau dùng kết quả cửa sổ trước), nên phải chạy tuần tự và độ trễ cộng dồn. Ngoài ra cần xử lý đầu ra sai định dạng (thiếu mã đoạn, lặp mã), tính không ổn định giữa các lần gọi, và rủi ro văn bản trong đoạn ứng viên chứa chỉ thị gây nhiễu LLM — một dạng prompt injection gián tiếp[[cite:greshake2023]].</p>
+
+<h3>So sánh tổng hợp</h3>
+<table>
+<thead><tr><th>Phương pháp</th><th>Tính trước phía tài liệu?</th><th>Chi phí mỗi truy vấn</th><th>Lưu trữ thêm</th><th>Vai trò điển hình</th></tr></thead>
+<tbody>
+<tr><td>Bi-encoder</td><td>Có (1 vector/đoạn)</td><td>Rất thấp (embed câu hỏi + ANN)</td><td>Thấp</td><td>Giai đoạn 1</td></tr>
+<tr><td>Late interaction (ColBERT)</td><td>Có (1 vector/token)</td><td>Thấp–trung bình</td><td>Cao (giảm được nhờ nén)</td><td>Giai đoạn 1 hoặc rerank nhẹ</td></tr>
+<tr><td>Cross-encoder</td><td>Không</td><td>Tỷ lệ với N × độ dài đoạn</td><td>Không</td><td>Rerank N ≈ vài chục tới vài trăm</td></tr>
+<tr><td>LLM listwise</td><td>Không</td><td>Cao (nhiều nghìn token, nhiều lần gọi)</td><td>Không</td><td>Rerank tập nhỏ khi chất lượng quan trọng hơn chi phí, hoặc làm “giáo viên” sinh nhãn</td></tr>
+</tbody></table>
+
+<h2>Ngân sách: chọn N ứng viên và k đoạn cuối</h2>
+<p>Có hai con số cần chọn: <strong>N</strong> — số ứng viên đưa vào reranker, và <strong>k</strong> — số đoạn giữ lại cho prompt.</p>
+<h3>Chọn N: nhìn đường cong Recall@N của giai đoạn 1</h3>
+<p>Reranker không thể đưa lên đầu một tài liệu không có trong danh sách. Vì vậy Recall@N của giai đoạn 1 là <em>trần</em> chất lượng của hệ thống. Cách làm:</p>
+<ol class="steps">
+<li>Trên bộ câu hỏi kiểm thử có nhãn, đo Recall@N của giai đoạn 1 với N = 10, 20, 50, 100, 200 (xem [[link:danh-gia/do-luong-retrieval]]).</li>
+<li>Tìm điểm đường cong bắt đầu phẳng: ví dụ (minh họa) Recall@20 = 0,78, Recall@50 = 0,90, Recall@100 = 0,92 thì tăng N từ 50 lên 100 gần như chỉ thêm chi phí.</li>
+<li>Đo độ trễ reranker ở các mức N đó trên phần cứng thật, ở p95 chứ không chỉ trung bình.</li>
+<li>Chọn N nhỏ nhất vừa đạt gần trần recall vừa nằm trong ngân sách độ trễ.</li>
+</ol>
+<p>Chi phí cross-encoder tỷ lệ gần tuyến tính với N × (độ dài câu hỏi + độ dài đoạn). Với câu hỏi 30 token và đoạn 300 token, N = 50 nghĩa là mô hình xử lý khoảng 50 × 330 = 16.500 token mỗi câu hỏi; N = 200 là khoảng 66.000 token. Các cặp xử lý được theo lô (batch) song song trên GPU, nên độ trễ không tăng tuyến tính hoàn toàn — nhưng chi phí tính toán thì có.</p>
+
+<h3>Chọn k: theo ngân sách ngữ cảnh</h3>
+<p>k phụ thuộc vào câu hỏi cần bao nhiêu đoạn để trả lời đủ, độ dài đoạn, và ngân sách token của prompt — bàn chi tiết ở [[link:sinh/xay-dung-context]]. Một cấu hình như “rerank top-50, giữ top-5” là điểm khởi đầu minh họa phổ biến, không phải quy luật. Thay vì k cố định, một số hệ thống dùng ngưỡng điểm reranker kết hợp k tối đa — nhưng ngưỡng phải hiệu chỉnh trên dữ liệu thật (xem phần lỗi thường gặp).</p>
+
+<div class="callout kinh-nghiem">
+<p><strong>Đặt ngân sách độ trễ trước, rồi chia cho các bước.</strong> Thực hành phổ biến là đặt mục tiêu p95 cho toàn bộ truy vấn (ví dụ vài giây cho trợ lý hội thoại), đo từng bước — embed truy vấn, truy hồi, rerank, sinh — rồi quyết định reranker được bao nhiêu mili-giây. Reranker thường là nơi dễ “co giãn” nhất: giảm N, dùng mô hình nhỏ hơn, cắt độ dài đoạn, hoặc lưu cache kết quả cho câu hỏi lặp lại. Xem [[link:van-hanh/chi-phi-do-tre]].</p>
+</div>
+
+<h2>Đánh giá reranker như thế nào</h2>
+<ul>
+<li><strong>So sánh trên cùng tập ứng viên</strong>: giữ nguyên giai đoạn 1, so nDCG@k và Recall@k (k = số đoạn đưa vào prompt) giữa “không rerank” và “có rerank”. Như vậy mọi khác biệt đến từ reranker.</li>
+<li><strong>Tách hai trần</strong>: Recall@N của giai đoạn 1 là trần; khoảng cách giữa Recall@k sau rerank và trần đó là phần reranker còn có thể cải thiện.</li>
+<li><strong>Đo cuối chuỗi</strong>: tốt hơn ở nDCG chưa chắc tốt hơn ở câu trả lời. Kiểm tra thêm chất lượng câu trả lời và độ trung thực — xem [[link:danh-gia/danh-gia-generation]].</li>
+<li><strong>Đo theo nhóm câu hỏi</strong>: câu có mã/số, câu không dấu, câu nhiều ý. Reranker có thể giúp nhóm này và hại nhóm khác.</li>
+<li><strong>Đo chi phí</strong>: độ trễ p50/p95, chi phí GPU hoặc token.</li>
+</ul>
+
+<h2>Reranker cho tiếng Việt và dữ liệu đa ngôn ngữ</h2>
+<p>Phần lớn reranker được huấn luyện chủ yếu trên tiếng Anh (MS MARCO là nguồn kinh điển). Với tiếng Việt, cần kiểm tra:</p>
+<ul>
+<li><strong>Mô hình có hỗ trợ tiếng Việt không.</strong> Các reranker đa ngôn ngữ như bge-reranker-v2-m3 (dựng trên BGE-M3) được giới thiệu là có khả năng đa ngôn ngữ mạnh[[cite:bgererankercard]]; vẫn cần đo trên câu hỏi tiếng Việt thật của bạn. VN-MTEB và benchmark của Nguyen và cộng sự có tác vụ rerank tiếng Việt, hữu ích để sàng lọc[[cite:pham2025vnmteb,nguyen2025viir]].</li>
+<li><strong>Giới hạn độ dài.</strong> Ví dụ trong model card bge-reranker-v2-m3 cắt cặp (câu hỏi, đoạn) ở 512 token[[cite:bgererankercard]]. Tiếng Việt thường tốn nhiều token hơn tiếng Anh cho cùng nội dung; đoạn dài sẽ bị cắt và nếu câu trả lời nằm ở cuối đoạn, reranker không bao giờ thấy nó. Đây là một lý do để chunk vừa phải (xem [[link:du-lieu/chunking]]).</li>
+<li><strong>Câu hỏi và tài liệu khác ngôn ngữ</strong> (hỏi tiếng Việt, tài liệu kỹ thuật tiếng Anh): cần reranker đa ngôn ngữ thật sự, không chỉ “hỗ trợ nhiều ngôn ngữ riêng lẻ”.</li>
+<li><strong>Không dấu, viết tắt</strong> (“tk” = tài khoản, “ck” = chuyển khoản): reranker có thể chấm thấp đoạn đúng vì không hiểu câu hỏi. Chuẩn hóa truy vấn trước (xem [[link:tim-kiem/xu-ly-truy-van]]) hoặc đưa cả câu đã chuẩn hóa vào reranker.</li>
+</ul>
+
+<h2>Lỗi thường gặp</h2>
+<details class="qa"><summary>Đặt ngưỡng “điểm reranker &gt; 0,5 thì giữ” và thấy kết quả thất thường</summary>
+<p>Điểm reranker không được hiệu chỉnh giữa các câu hỏi: câu hỏi dễ có nhiều đoạn điểm cao, câu hỏi khó có đoạn đúng nhưng điểm thấp. Nếu dùng ngưỡng, hãy chọn nó trên bộ kiểm thử, kết hợp với k tối thiểu và tối đa, và theo dõi tỷ lệ câu hỏi bị trả về rỗng.</p></details>
+<details class="qa"><summary>Reranker đẩy văn bản đã hết hiệu lực lên đầu</summary>
+<p>Reranker chỉ đánh giá mức liên quan về nội dung, không biết văn bản nào mới hơn hay có thẩm quyền hơn. Thông tin như ngày hiệu lực, phiên bản phải được xử lý bằng bộ lọc metadata hoặc trộn thêm vào điểm — xem [[link:du-lieu/metadata-va-bieu-dien]].</p></details>
+<details class="qa"><summary>Top-5 sau rerank toàn những đoạn gần như giống hệt nhau</summary>
+<p>Kho có nhiều bản sao hoặc phiên bản gần giống của cùng tài liệu. Reranker chấm cả năm đều cao. Hãy khử trùng lặp khi lập chỉ mục (xem [[link:du-lieu/thu-thap-lam-sach]]) và/hoặc gộp theo tài liệu gốc trước khi chọn top-k.</p></details>
+<details class="qa"><summary>Câu hỏi cần ghép hai mảnh thông tin thì rerank làm tệ hơn</summary>
+<p>Với câu hỏi nhiều bước (“chi nhánh gần nhất của ngân hàng quản lý tài khoản của tôi mở cửa mấy giờ?”), từng mảnh riêng lẻ có thể không “liên quan” rõ với toàn bộ câu hỏi và bị reranker đẩy xuống. Tách câu hỏi trước khi truy hồi (xem [[link:tim-kiem/xu-ly-truy-van]]) hoặc dùng truy hồi lặp (xem [[link:nang-cao/agentic-graphrag]]).</p></details>
+<details class="qa"><summary>Thêm reranker xong độ trễ p95 tăng vọt dù trung bình vẫn ổn</summary>
+<p>Đoạn dài bất thường, N lớn với một số câu hỏi, hoặc hàng đợi GPU bị nghẽn lúc cao điểm. Giới hạn độ dài đầu vào, cố định N, và đo dưới tải thật.</p></details>
+
+<div class="callout nhan-dinh">
+<p>Theo nhận định của người biên soạn, trong nhiều hệ thống RAG, thêm một cross-encoder đa ngôn ngữ cỡ vừa sau hybrid search là một trong những cải tiến có tỷ lệ “hiệu quả trên công sức” cao nhất — thường đáng làm trước khi thay mô hình embedding hay viết lại truy vấn bằng LLM. LLM listwise hấp dẫn về chất lượng nhưng chi phí và độ trễ khó chấp nhận cho mọi câu hỏi; nó hợp hơn với tác vụ offline như sinh nhãn đánh giá hoặc chưng cất sang mô hình nhỏ. Đây là nhận định thực hành, cần kiểm chứng trên dữ liệu và ngân sách của bạn.</p>
+</div>
+
+<h2>Tự kiểm tra hiểu biết</h2>
+<div class="callout kiem-chung">
+<ol>
+<li>Vì sao cross-encoder thường chính xác hơn bi-encoder, và vì sao không dùng nó cho toàn bộ kho?</li>
+<li>Giai đoạn 1 có Recall@50 = 0,70. Bạn thay reranker tốt hơn nhiều. Recall@5 sau rerank tối đa đạt bao nhiêu? Nên cải thiện bước nào trước?</li>
+<li>Với cấu hình RankGPT cửa sổ 20, bước 10 trên top-100, có bao nhiêu lần gọi LLM? Nếu chỉ rerank top-40 thì sao? (Đáp án: 9 và 3.)</li>
+<li>Thí nghiệm: lấy 50 câu hỏi có nhãn, đo nDCG@5 của giai đoạn 1, rồi của giai đoạn 1 + reranker với N = 20, 50, 100. Ghi kèm độ trễ p95. Cấu hình nào bạn chọn?</li>
+<li>Một chunk dài 900 token tiếng Việt, reranker cắt ở 512 token. Điều gì có thể xảy ra, và bạn khắc phục thế nào?</li>
+</ol>
+</div>
+
+<h2>Đọc tiếp</h2>
+<ul>
+<li>Bài tiếp theo: [[link:tim-kiem/xu-ly-truy-van]] — viết lại, tách và mở rộng câu hỏi trước khi truy hồi.</li>
+<li>Bài trước: [[link:tim-kiem/hybrid-search]] — tạo danh sách ứng viên tốt cho reranker.</li>
+<li>Sau khi có top-k: sắp xếp đoạn trong prompt ở [[link:sinh/xay-dung-context]].</li>
+<li>Đo lường: [[link:danh-gia/do-luong-retrieval]]; chi phí và độ trễ: [[link:van-hanh/chi-phi-do-tre]].</li>
+<li>Tài liệu gốc: monoBERT[[cite:nogueira2019]], ColBERT[[cite:khattab2020]], ColBERTv2[[cite:santhanam2022]], RankGPT[[cite:sun2023rankgpt]].</li>
+</ul>

@@ -1,0 +1,196 @@
+---
+{
+  "title": "Thu thập và làm sạch dữ liệu cho RAG",
+  "navTitle": "Thu thập & làm sạch",
+  "description": "Trích xuất văn bản sạch từ PDF, ảnh quét, HTML, tài liệu Office, bảng và wiki; xử lý các bẫy riêng của tiếng Việt (Unicode NFC/NFD, bảng mã TCVN3/VNI, lỗi OCR dấu thanh); khử trùng lặp, quản lý phiên bản, cập nhật tăng dần, quyền truy cập và dữ liệu cá nhân.",
+  "lead": "Mô hình không thể trả lời đúng từ một đoạn văn bị trích sai: bảng bị vỡ thành chuỗi số vô nghĩa, hai cột bị trộn dòng, chữ “Điều” biến thành “Diều” sau OCR. Khâu thu thập và làm sạch ít được chú ý nhất nhưng đặt trần cho chất lượng của mọi khâu phía sau.",
+  "level": "Trung cấp",
+  "reviewed": "2026-10-22",
+  "kinds": ["nen-tang", "nghien-cuu", "kinh-nghiem", "nhan-dinh"]
+}
+---
+<div class="callout tom-tat">
+<ul>
+<li>Mỗi loại nguồn (PDF có lớp chữ, PDF quét, HTML, Word, Excel, wiki, cơ sở dữ liệu) có bẫy trích xuất riêng. Hãy kiểm kê nguồn trước khi chọn công cụ.</li>
+<li>Với tiếng Việt, ba việc gần như bắt buộc: <strong>chuẩn hóa Unicode về NFC</strong>, <strong>phát hiện và chuyển bảng mã cũ</strong> (TCVN3, VNI) trong tài liệu cũ, và <strong>thống nhất kiểu đặt dấu</strong> (“hoà” / “hòa”).</li>
+<li>Khử trùng lặp hai tầng: trùng chính xác bằng hash sau chuẩn hóa; gần trùng bằng shingling + MinHash. Nhưng các <em>phiên bản</em> của cùng một tài liệu cần được đánh dấu, không chỉ xóa.</li>
+<li>Định danh tài liệu ổn định, hash nội dung và ngày hiệu lực là nền móng cho cập nhật tăng dần. Quyền truy cập và cờ dữ liệu cá nhân phải được ghi lại <em>ngay khi thu thập</em>.</li>
+</ul>
+</div>
+
+<h2>Vì sao khâu này đặt trần cho chất lượng</h2>
+<p>Trong bảy điểm lỗi mà Barnett và cộng sự rút ra từ ba hệ thống RAG thực tế, điểm đầu tiên là <em>nội dung không có trong kho</em>[[cite:barnett2024]]. Với dữ liệu doanh nghiệp, “không có” thường không có nghĩa là tài liệu chưa được nạp, mà là nó đã được nạp <em>dưới dạng không tìm được</em>: bảng biểu phí trích thành một dòng số liền nhau, văn bản quét không có lớp chữ, chính sách mới bị bản cũ trùng lặp lấn át trong top-k.</p>
+<p>Lỗi ở khâu này có ba đặc điểm khiến nó nguy hiểm. Nó <strong>im lặng</strong>: pipeline vẫn chạy, chỉ mục vẫn đầy. Nó <strong>lan truyền</strong>: chunking, embedding và BM25 đều hoạt động trên văn bản đã hỏng. Và nó <strong>đắt để sửa muộn</strong>: phát hiện sau khi đã lập chỉ mục nghĩa là phải trích xuất lại, chunk lại, embed lại (xem bảng chi phí đảo ngược trong [[link:nen-tang/kien-truc-tong-quan]]).</p>
+
+<h2>Kiểm kê nguồn dữ liệu</h2>
+<p>Trước khi chọn thư viện, hãy lập danh sách nguồn và đếm xem mỗi loại chiếm bao nhiêu phần kho. Bảng dưới tóm tắt các loại hay gặp ở doanh nghiệp Việt Nam.</p>
+<table>
+<thead><tr><th>Loại nguồn</th><th>Cách trích xuất</th><th>Rủi ro chính</th></tr></thead>
+<tbody>
+<tr><td>PDF có lớp chữ (xuất từ Word)</td><td>Đọc lớp chữ, phân tích bố cục</td><td>Header/footer lặp, nhiều cột trộn dòng, bảng vỡ, gạch nối cuối dòng, ký tự ghép (ligature)</td></tr>
+<tr><td>PDF quét, ảnh chụp (công văn có dấu đỏ, hợp đồng ký tay)</td><td>OCR, có thể kèm phân tích bố cục</td><td>Sai dấu thanh, nhầm ký tự, mất cấu trúc bảng, chữ ký và con dấu lẫn vào văn bản</td></tr>
+<tr><td>HTML (website, trung tâm trợ giúp)</td><td>Trích phần nội dung chính, giữ tiêu đề</td><td>Menu, chân trang, banner, “bài viết liên quan” lặp ở mọi trang</td></tr>
+<tr><td>Word, PowerPoint</td><td>Đọc cấu trúc tài liệu (heading, danh sách, bảng)</td><td>Theo dõi thay đổi (track changes) và bình luận lẫn vào, slide chỉ có hình</td></tr>
+<tr><td>Excel, CSV, bảng biểu phí</td><td>Đọc theo ô, giữ tên cột</td><td>Ô gộp, nhiều bảng trong một sheet, công thức thay vì giá trị; thường nên truy vấn trực tiếp thay vì lập chỉ mục văn bản</td></tr>
+<tr><td>Wiki nội bộ, Confluence, SharePoint</td><td>API của hệ thống, kèm metadata và quyền</td><td>Trang nháp, trang lỗi thời không ai xóa, macro và nội dung nhúng</td></tr>
+<tr><td>Cơ sở dữ liệu, hệ thống ticket</td><td>Truy vấn có cấu trúc, ghép trường thành văn bản nếu cần</td><td>Dữ liệu cá nhân, dữ liệu thay đổi liên tục — cân nhắc gọi công cụ thay vì lập chỉ mục (xem [[link:nen-tang/khi-nao-dung-rag]])</td></tr>
+<tr><td>Email, chat</td><td>Tách luồng, bỏ phần trích dẫn thư cũ và chữ ký</td><td>Trùng lặp rất cao, nhiều PII, quyền truy cập theo người nhận</td></tr>
+</tbody>
+</table>
+<p>Các bộ công cụ mã nguồn mở như Docling (hỗ trợ PDF, DOCX, PPTX, XLSX, HTML, ảnh; phân tích bố cục, thứ tự đọc, cấu trúc bảng, OCR)[[cite:auer2024docling]] và unstructured (chia tài liệu thành các phần tử có loại; một số định dạng cần cài thêm tesseract, poppler, LibreOffice)[[cite:unstructured]] giúp bạn không phải viết bộ đọc cho từng định dạng. Với HTML, Trafilatura chuyên trích phần nội dung chính và metadata, loại bỏ menu và phần lặp[[cite:barbaresi2021trafilatura]]. Các công cụ này thay đổi nhanh; thông tin ở đây đúng tính đến 10/2026 — hãy đọc tài liệu phiên bản bạn dùng, và quan trọng hơn, <em>tự kiểm tra kết quả trên tài liệu của chính bạn</em>.</p>
+
+<h2>Các bẫy trích xuất thường gặp</h2>
+
+<h3>Header, footer và số trang lặp lại</h3>
+<p>Một quy chế 80 trang có dòng “QUY CHẾ CHI TIÊU NỘI BỘ — Lưu hành nội bộ — Trang 12/80” ở mọi trang. Nếu không loại bỏ, dòng này lặp 80 lần trong kho, xuất hiện giữa câu khi một đoạn văn vắt qua hai trang, và kéo mọi câu hỏi có chữ “nội bộ” về phía các chunk vô nghĩa. Cách xử lý phổ biến: phát hiện các dòng xuất hiện ở cùng vị trí trên nhiều trang (đầu/cuối trang), hoặc dựa vào nhãn header/footer của công cụ phân tích bố cục.</p>
+
+<h3>Bố cục nhiều cột và thứ tự đọc</h3>
+<p>Bản tin, tạp chí, một số văn bản pháp luật dạng công báo được dàn hai cột. Trích xuất ngây thơ đọc ngang qua cả hai cột, ghép nửa câu bên trái với nửa câu bên phải. Kết quả trông như văn bản, qua được mọi kiểm tra tự động, nhưng vô nghĩa. Cần công cụ có phân tích thứ tự đọc (reading order), và cần mở vài trang ra xem bằng mắt.</p>
+
+<h3>Bảng biểu</h3>
+<p>Bảng là nơi trích xuất hỏng nhiều nhất và cũng là nơi chứa thông tin hay bị hỏi nhất (biểu phí, hạn mức, lịch trình). Một bảng phí thẻ bị trích thành “Chuẩn Vàng Bạch kim Phí thường niên 300.000 500.000 1.000.000” làm mất liên kết giữa hạng thẻ và con số. Mục tiêu là giữ cấu trúc hàng–cột (ví dụ dưới dạng Markdown hoặc HTML) để bước sau có thể biểu diễn lại từng hàng; xem [[link:du-lieu/metadata-va-bieu-dien]] cho cách lập chỉ mục bảng.</p>
+
+<h3>Ngắt dòng, gạch nối và khoảng trắng</h3>
+<p>PDF lưu văn bản theo dòng hiển thị, không theo đoạn. Cần ghép lại các dòng thuộc cùng đoạn, bỏ gạch nối cuối dòng ở văn bản tiếng Anh (tiếng Việt ít gặp vì âm tiết ngắn), chuẩn hóa khoảng trắng không ngắt (U+00A0) và ký tự vô hình (U+200B) — những ký tự làm BM25 không khớp được từ dù nhìn giống hệt.</p>
+
+<h3>PDF quét và OCR</h3>
+<p>Với văn bản quét, chất lượng phụ thuộc vào độ phân giải, độ nghiêng, con dấu và chữ ký đè lên chữ, và mô hình OCR có được huấn luyện cho tiếng Việt hay không. Đừng giả định: chạy OCR trên một mẫu, so với bản gốc, rồi mới quyết định. Một số trường hợp, như phiếu có bố cục phức tạp, có thể phù hợp hơn với hướng truy hồi trực tiếp trên ảnh trang (xem [[link:du-lieu/metadata-va-bieu-dien]]).</p>
+
+<h2>Những vấn đề riêng của tiếng Việt</h2>
+
+<h3>Chuẩn hóa Unicode: NFC và NFD</h3>
+<div class="callout nen-tang">
+<p>Unicode cho phép biểu diễn cùng một chữ có dấu theo hai cách: một <em>ký tự dựng sẵn</em> (precomposed) hoặc <em>chữ cơ sở + các dấu tổ hợp</em> (combining marks). Hai cách được coi là <strong>tương đương chính tắc</strong> (canonical equivalence). Phụ lục UAX #15 định nghĩa bốn dạng chuẩn hóa: NFD (phân rã chính tắc), NFC (phân rã rồi hợp lại thành ký tự dựng sẵn), và hai dạng tương thích NFKD, NFKC[[cite:unicode-uax15]].</p>
+</div>
+<p>Tiếng Việt là trường hợp điển hình vì nhiều chữ mang hai dấu. Chữ “ệ” ở dạng NFC là một ký tự (U+1EC7); ở dạng NFD là ba: “e” + dấu chấm dưới (U+0323) + dấu mũ (U+0302). Văn bản gõ trên các bộ gõ khác nhau, sao chép từ macOS, hoặc trích từ PDF có thể ở dạng NFD hoặc trộn lẫn. Hậu quả: chuỗi “Việt” trong câu hỏi không khớp “Việt” trong tài liệu dù hiển thị giống hệt, BM25 bỏ sót, tokenizer cắt khác nhau, và độ dài ký tự của chunk bị sai lệch. Tài liệu Python nói rõ: hai chuỗi trông giống nhau với người đọc nhưng một chuỗi có ký tự tổ hợp, một chuỗi không, có thể không bằng nhau[[cite:python-unicodedata]].</p>
+<pre><code>import unicodedata
+
+a = "Việt"                 # NFC: "Việt", 4 ký tự
+b = "Việt"          # NFD: "Việt", 6 ký tự
+# Trình soạn thảo, trình duyệt có thể đã lặng lẽ đổi b về NFC khi sao chép,
+# nên ép lại cho chắc: V, i, e, U+0323 (chấm dưới), U+0302 (mũ), t
+b = unicodedata.normalize("NFD", a)
+print(a == b)                   # False
+print(len(a), len(b))           # 4 6
+na = unicodedata.normalize("NFC", a)
+nb = unicodedata.normalize("NFC", b)
+print(na == nb)                 # True
+</code></pre>
+<p><strong>Quy tắc:</strong> chuẩn hóa <em>mọi</em> văn bản về NFC ở bước trích xuất, và chuẩn hóa <em>câu hỏi</em> về NFC ở bước truy vấn. Thiếu một trong hai vế là đủ gây lỗi. Tránh NFKC cho toàn bộ văn bản nếu chưa hiểu tác động: nó còn biến đổi các ký tự tương thích như chỉ số trên, phân số, chữ số La Mã, có thể làm thay đổi nghĩa trong văn bản kỹ thuật.</p>
+
+<h3>Kiểu đặt dấu: “hoà” hay “hòa”</h3>
+<p>Ngoài chuẩn hóa Unicode, tiếng Việt còn hai kiểu đặt dấu thanh cùng tồn tại: kiểu cũ đặt dấu trên nguyên âm thứ hai (“hoà”, “thuỷ”, “khoẻ”) và kiểu mới đặt trên nguyên âm thứ nhất trong một số vần (“hòa”, “thủy”, “khỏe”). Cả hai đều là NFC hợp lệ nhưng là <em>các chuỗi khác nhau</em> — NFC không gộp chúng. Một văn bản pháp luật viết “Cộng hoà”, câu hỏi gõ “Cộng hòa”: tìm kiếm từ khóa không khớp. Embedding thường chịu được khác biệt nhỏ này, BM25 thì không. Giải pháp phổ biến là chọn một kiểu và chuyển đổi cả văn bản lẫn câu hỏi bằng bảng ánh xạ vần cố định, hoặc chuẩn hóa ở tầng phân tích (analyzer) của chỉ mục từ khóa — nhưng vẫn lưu văn bản gốc để hiển thị trích dẫn.</p>
+
+<h3>Bảng mã cũ: TCVN3 (ABC), VNI</h3>
+<p>Văn bản soạn từ trước khi Unicode phổ biến — rất hay gặp trong kho công văn, hồ sơ cũ của cơ quan và doanh nghiệp — thường dùng phông của bảng mã TCVN3 (phông “.Vn…”) hoặc VNI. Chữ được lưu bằng mã 8-bit và chỉ hiển thị đúng khi có đúng phông. Khi trích xuất ra Unicode, bạn nhận được chuỗi trông như “Céng hoµ x· héi chñ nghÜa ViÖt Nam” thay vì “Cộng hoà xã hội chủ nghĩa Việt Nam”. Chuỗi này qua mọi kiểm tra “có phải văn bản không”, được embed và lập chỉ mục bình thường — và không bao giờ khớp với câu hỏi nào.</p>
+<div class="callout kinh-nghiem">
+<p>Cách phát hiện thực dụng: đếm tỷ lệ âm tiết không hợp lệ trong tiếng Việt, hoặc tỷ lệ các ký tự hiếm trong văn bản tiếng Việt Unicode nhưng phổ biến trong văn bản TCVN3/VNI bị đọc sai (ví dụ “µ”, “§”, “Ö”, “Ü” xuất hiện dày đặc). Tài liệu vượt ngưỡng được đưa qua bộ chuyển mã (có nhiều công cụ chuyển đổi TCVN3/VNI → Unicode) rồi kiểm tra lại. Ngưỡng cụ thể cần chỉnh trên dữ liệu của bạn.</p>
+</div>
+
+<h3>Lỗi OCR với dấu thanh</h3>
+<p>OCR tiếng Việt hay sai ở chỗ dấu: “Điều 5” thành “Diều 5”, “hợp đồng” thành “hop đồng”, dấu nặng bị mất ở chữ in nhỏ, chữ “ơ” và “o” lẫn nhau khi bản quét mờ. Một ký tự sai làm cả từ không khớp với tìm kiếm từ khóa, và các con số (số tiền, ngày, số hiệu văn bản) sai thì không mô hình nào sửa được. Thực hành nên làm: đo tỷ lệ lỗi trên một mẫu nhỏ có bản đúng để đối chiếu, đánh dấu chunk đến từ OCR bằng metadata (<code>"extraction": "ocr"</code>) để có thể cảnh báo khi trích dẫn, và ưu tiên tìm bản điện tử gốc nếu có.</p>
+
+<h3>Khoảng trắng tách âm tiết, không tách từ</h3>
+<p>Trong tiếng Việt, khoảng trắng ngăn cách các <em>âm tiết</em>; một từ có thể gồm nhiều âm tiết (“thẻ tín dụng”, “ngân hàng”). Điều này ảnh hưởng tới cách đếm “từ” khi chunking và tới tìm kiếm từ khóa; các bộ công cụ như VnCoreNLP cung cấp tách từ tiếng Việt khi cần[[cite:vu2018vncorenlp]]. Ở khâu làm sạch, chỉ cần nhớ: đừng xóa hay gộp khoảng trắng theo quy tắc của tiếng Anh. Tác động tới chunking và BM25 được bàn ở [[link:du-lieu/chunking]] và [[link:tim-kiem/hybrid-search]].</p>
+
+<h2>Khử trùng lặp</h2>
+<p>Kho doanh nghiệp trùng lặp nhiều hơn bạn tưởng: cùng một chính sách nằm ở thư mục phòng nhân sự, đính kèm trong email và được dán lại vào wiki; một mẫu hợp đồng có 40 bản chỉ khác tên khách hàng. Trùng lặp gây ba hại: top-k bị lấp đầy bởi các bản sao (giảm đa dạng thông tin), chi phí embedding và lưu trữ tăng, và nguy hiểm nhất — bản cũ và bản mới cùng xuất hiện, mô hình chọn nhầm.</p>
+<ol class="steps">
+<li><strong>Trùng chính xác.</strong> Tính hash (ví dụ SHA-256) trên văn bản <em>sau</em> chuẩn hóa (NFC, khoảng trắng, bỏ header/footer). Hash trên tệp gốc bỏ lỡ hai bản PDF cùng nội dung nhưng khác metadata.</li>
+<li><strong>Gần trùng.</strong> Biểu diễn mỗi tài liệu bằng tập <em>shingle</em> (các chuỗi k âm tiết liên tiếp) và đo độ giống bằng hệ số Jaccard. Broder (1997) chỉ ra có thể ước lượng độ giống này bằng một mẫu kích thước cố định cho mỗi tài liệu, tính độc lập — nền tảng của MinHash[[cite:broder1997]]. Kết hợp với LSH (locality-sensitive hashing) để tìm các cặp giống nhau mà không phải so từng cặp; thư viện datasketch cài đặt sẵn MinHash và MinHash LSH[[cite:datasketch]].</li>
+<li><strong>Quyết định làm gì với cụm trùng.</strong> Bản sao y hệt: giữ một, ghi lại các vị trí khác trong metadata (hữu ích cho phân quyền — xem bên dưới). Bản gần trùng là các <em>phiên bản</em>: không xóa mù, mà xác định bản nào đang hiệu lực. Bản gần trùng là <em>mẫu điền khác nhau</em> (hợp đồng từng khách): cân nhắc chỉ lập chỉ mục mẫu, hoặc giữ tất cả nhưng gắn metadata khách hàng để lọc.</li>
+</ol>
+<div class="callout canh-bao">
+<p><strong>Trùng lặp và phân quyền.</strong> Nếu hai bản sao nằm ở hai nơi có quyền khác nhau (một ở thư mục ban giám đốc, một ở thư mục chung), gộp chúng thành một chunk phải gộp cả <em>quyền</em> theo đúng logic. Cách an toàn: quyền của chunk gộp là hợp các nhóm được xem từ mọi vị trí, <em>chỉ khi</em> nội dung đúng là y hệt; nếu chỉ gần trùng, giữ riêng.</p>
+</div>
+
+<h2>Phiên bản, độ mới và cập nhật tăng dần</h2>
+<p>Với văn bản quy phạm, chính sách, biểu phí — loại dữ liệu chiếm phần lớn các hệ thống RAG doanh nghiệp — câu hỏi “bản nào đúng?” quan trọng ngang câu hỏi “nội dung gì?”. Một nhân viên hỏi về hạn mức công tác phí cần câu trả lời theo quy chế <em>đang hiệu lực</em>, không theo bản năm 2022 vẫn nằm trong thư mục.</p>
+<table>
+<thead><tr><th>Trường</th><th>Ví dụ</th><th>Dùng để</th></tr></thead>
+<tbody>
+<tr><td><code>doc_id</code> ổn định</td><td><code>hr/quy-che-cong-tac-phi</code></td><td>Cập nhật, xóa đúng tài liệu trong chỉ mục; gom các phiên bản</td></tr>
+<tr><td><code>version</code></td><td><code>2026-03</code> hoặc số hiệu văn bản</td><td>Phân biệt phiên bản, hiển thị trong trích dẫn</td></tr>
+<tr><td><code>content_hash</code></td><td>SHA-256 của văn bản đã chuẩn hóa</td><td>Phát hiện thay đổi thật sự, bỏ qua lần đồng bộ không đổi nội dung</td></tr>
+<tr><td><code>effective_from</code> / <code>effective_to</code></td><td><code>2026-04-01</code> / <code>null</code></td><td>Lọc theo hiệu lực tại thời điểm hỏi, hoặc tại thời điểm người hỏi chỉ định</td></tr>
+<tr><td><code>source_modified_at</code></td><td>Thời điểm sửa ở hệ thống nguồn</td><td>Đồng bộ tăng dần, cảnh báo dữ liệu cũ</td></tr>
+<tr><td><code>superseded_by</code></td><td><code>hr/quy-che-cong-tac-phi@2026-03</code></td><td>Khi câu trả lời dựa trên bản cũ, chỉ ra bản thay thế</td></tr>
+</tbody>
+</table>
+<p>Ngày hiệu lực khác ngày sửa tệp. Một nghị định ban hành ngày 15 nhưng có hiệu lực từ ngày 1 tháng sau; một chính sách khuyến mãi chỉ áp dụng trong 30 ngày. Thông tin này thường nằm <em>trong</em> văn bản (“Quyết định này có hiệu lực kể từ ngày…”) và cần được trích ra — bằng quy tắc, biểu thức chính quy hoặc LLM — rồi kiểm tra lại, vì sai ngày hiệu lực còn nguy hiểm hơn không có.</p>
+<p><strong>Cập nhật tăng dần</strong> dựa trên ba thao tác với khóa <code>doc_id</code>:</p>
+<ol class="steps">
+<li><strong>Thêm/sửa (upsert):</strong> nếu <code>content_hash</code> đổi, xóa mọi chunk cũ của <code>doc_id</code> (hoặc của phiên bản đó) rồi chèn chunk mới. Chunk lại cả tài liệu thường đơn giản và an toàn hơn cố gắng chỉ sửa chunk bị ảnh hưởng.</li>
+<li><strong>Xóa:</strong> khi tài liệu biến mất khỏi nguồn, xóa chunk tương ứng. Nhiều connector chỉ báo “tệp mới/sửa”, không báo “tệp bị xóa” — cần đối chiếu định kỳ danh sách tài liệu ở nguồn với chỉ mục.</li>
+<li><strong>Hết hiệu lực:</strong> không xóa mà cập nhật <code>effective_to</code>, để vẫn trả lời được câu hỏi lịch sử (“năm 2024 quy định thế nào?”) nhưng mặc định lọc bỏ.</li>
+</ol>
+
+<h2>Quyền truy cập: ghi nhận ngay khi thu thập</h2>
+<p>Bộ kết nối là nơi duy nhất nhìn thấy quyền gốc của tài liệu: ai sở hữu, nhóm nào được đọc, trang wiki nào bị giới hạn. Nếu không ghi lại ở đây, các bước sau không có cách nào khôi phục. Mỗi chunk nên mang theo danh sách nhóm được xem (ví dụ <code>"acl": ["phong-tin-dung", "ban-giam-doc"]</code>), và bộ đồng bộ phải cập nhật lại khi quyền ở nguồn thay đổi — một người bị rút quyền hôm nay không được tiếp tục thấy tài liệu qua trợ lý AI vì chỉ mục chưa đồng bộ. Cách áp dụng bộ lọc khi truy hồi và các rủi ro liên quan được bàn ở [[link:van-hanh/bao-mat]].</p>
+
+<h2>Dữ liệu cá nhân (PII)</h2>
+<p>Ticket hỗ trợ, email, hồ sơ nhân sự, hợp đồng chứa họ tên, số điện thoại, số căn cước công dân, số tài khoản, địa chỉ. Một khi đã vào chỉ mục, chúng có thể xuất hiện trong câu trả lời cho người không nên thấy. Các lựa chọn, theo thứ tự ưu tiên:</p>
+<ol>
+<li><strong>Không đưa vào</strong> những nguồn không cần thiết cho mục đích của trợ lý.</li>
+<li><strong>Loại bỏ hoặc che</strong> (redact) các trường nhạy cảm trước khi lập chỉ mục: “Khách hàng [TÊN], SĐT [SĐT] phản ánh…”.</li>
+<li><strong>Giả danh hóa</strong> (pseudonymization): thay bằng mã nhất quán khi cần giữ liên kết giữa các bản ghi, lưu bảng ánh xạ ở nơi riêng có kiểm soát.</li>
+<li><strong>Giữ nguyên nhưng phân quyền chặt</strong> khi chính dữ liệu cá nhân là nội dung cần tra cứu (ví dụ trợ lý cho bộ phận nhân sự), kèm ghi log truy cập.</li>
+</ol>
+<p>Công cụ như Presidio phát hiện thực thể bằng kết hợp nhận dạng thực thể, biểu thức chính quy, quy tắc và checksum, và cho phép thêm bộ nhận dạng tùy chỉnh[[cite:presidio]]. Các bộ nhận dạng có sẵn phần lớn hướng tới định dạng phương Tây (ví dụ số an sinh xã hội, số điện thoại Mỹ), nên với dữ liệu Việt Nam bạn sẽ cần tự viết bộ nhận dạng cho số căn cước 12 chữ số, số điện thoại di động trong nước, số tài khoản ngân hàng, và kiểm tra khả năng nhận dạng tên người tiếng Việt. Chính tài liệu của Presidio cũng nhấn mạnh phát hiện tự động <em>không bảo đảm</em> tìm thấy mọi thông tin nhạy cảm — cần thêm các lớp bảo vệ khác. Về nghĩa vụ pháp lý đối với dữ liệu cá nhân tại Việt Nam, hãy làm việc với bộ phận pháp chế để đối chiếu quy định hiện hành; sổ tay này không thay thế tư vấn pháp lý.</p>
+
+<h2>Một pipeline thu thập gợi ý</h2>
+<ol class="steps">
+<li><strong>Kéo</strong> tài liệu và metadata gốc (đường dẫn, người sở hữu, quyền, thời điểm sửa) qua connector.</li>
+<li><strong>Nhận diện loại</strong>: PDF có lớp chữ hay quét, ngôn ngữ, bảng mã.</li>
+<li><strong>Trích xuất có cấu trúc</strong>: tiêu đề, đoạn, bảng, danh sách; OCR khi cần.</li>
+<li><strong>Chuẩn hóa</strong>: chuyển bảng mã cũ → Unicode, NFC, thống nhất kiểu dấu (nếu chọn), khoảng trắng, bỏ header/footer.</li>
+<li><strong>Trích metadata nội dung</strong>: số hiệu, ngày ban hành, ngày hiệu lực, loại văn bản.</li>
+<li><strong>Kiểm tra chất lượng</strong>: tỷ lệ âm tiết không hợp lệ, độ dài bất thường, trang rỗng; đẩy tài liệu nghi vấn vào hàng đợi xem tay.</li>
+<li><strong>Phát hiện PII</strong> và áp chính sách đã chọn.</li>
+<li><strong>Khử trùng lặp</strong> và gán phiên bản.</li>
+<li><strong>Lưu tầng văn bản trung gian</strong> có phiên bản — đầu vào cho [[link:du-lieu/chunking]].</li>
+</ol>
+<p>Kết quả của pipeline cho mỗi tài liệu có thể trông như sau (rút gọn):</p>
+<pre><code>{
+  "doc_id": "hr/quy-che-cong-tac-phi",
+  "version": "2026-03",
+  "title": "Quy chế công tác phí",
+  "source_uri": "sharepoint://nhan-su/quy-che/cong-tac-phi-2026.docx",
+  "language": "vi",
+  "extraction": "docx",
+  "unicode_form": "NFC",
+  "content_hash": "sha256:9f2c…",
+  "effective_from": "2026-04-01",
+  "effective_to": null,
+  "acl": ["toan-cong-ty"],
+  "pii": "none-detected",
+  "blocks": [
+    {"type": "heading", "level": 1, "text": "Chương II. Mức chi công tác phí"},
+    {"type": "paragraph", "text": "Điều 5. Phụ cấp lưu trú …"},
+    {"type": "table", "rows": [["Vùng", "Mức phụ cấp/ngày"], ["…", "…"]]}
+  ]
+}
+</code></pre>
+
+<div class="callout nhan-dinh">
+<p>Theo kinh nghiệm của người biên soạn, phần lớn cải thiện chất lượng “dễ ăn” của một hệ thống RAG doanh nghiệp tiếng Việt nằm ở khâu này chứ không ở việc chọn mô hình embedding hay reranker: chuẩn hóa Unicode, xử lý bảng mã cũ, giữ cấu trúc bảng và loại bản cũ hết hiệu lực. Đây là nhận định từ thực hành, chưa có nghiên cứu định lượng nào chúng tôi biết đo riêng cho tiếng Việt; bạn có thể tự kiểm chứng bằng cách so sánh recall trước và sau khi làm sạch trên cùng bộ câu hỏi.</p>
+</div>
+
+<h2>Kiểm chứng chất lượng trích xuất</h2>
+<div class="callout kiem-chung">
+<ol>
+<li><strong>Đọc bằng mắt.</strong> Chọn ngẫu nhiên 20 tài liệu, mỗi loại nguồn ít nhất 3, đặt bản gốc cạnh văn bản trích xuất. Kiểm tra thứ tự đọc, bảng, dấu tiếng Việt, header/footer.</li>
+<li><strong>Kiểm tra Unicode.</strong> Với mỗi tài liệu, kiểm tra <code>unicodedata.is_normalized("NFC", text)</code>; đếm tỷ lệ âm tiết không hợp lệ để bắt TCVN3/VNI và OCR kém.</li>
+<li><strong>Thống kê bất thường.</strong> Tài liệu nhiều trang nhưng ít chữ (có thể là bản quét chưa OCR), dòng lặp lại trên nhiều trang (header/footer sót), tỷ lệ chữ số cao bất thường (bảng bị vỡ).</li>
+<li><strong>Kiểm tra trùng lặp và phiên bản.</strong> Với 10 chính sách quan trọng nhất, tìm trong chỉ mục: có bao nhiêu bản, bản nào được đánh dấu hiệu lực?</li>
+<li><strong>Kiểm tra đầu-cuối.</strong> Viết 10 câu hỏi mà đáp án nằm trong bảng hoặc trong văn bản quét; kiểm tra đoạn được truy hồi có chứa đáp án đọc được không. Xem [[link:danh-gia/do-luong-retrieval]].</li>
+</ol>
+</div>
+
+<h2>Đọc tiếp</h2>
+<ul>
+<li>Bài tiếp theo: [[link:du-lieu/chunking]] — cắt văn bản đã làm sạch thành đơn vị truy hồi.</li>
+<li>Cách gắn metadata, biểu diễn bảng và hình ảnh: [[link:du-lieu/metadata-va-bieu-dien]].</li>
+<li>Áp dụng quyền truy cập khi truy hồi, đầu độc dữ liệu và prompt injection gián tiếp: [[link:van-hanh/bao-mat]].</li>
+<li>Khi câu trả lời sai và nghi do dữ liệu: [[link:danh-gia/chan-doan-loi]].</li>
+</ul>

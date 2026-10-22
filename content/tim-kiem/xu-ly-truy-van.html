@@ -1,0 +1,200 @@
+---
+{
+  "title": "Xử lý truy vấn: khi nào nên viết lại, tách hoặc mở rộng câu hỏi trước khi truy hồi?",
+  "navTitle": "Xử lý truy vấn",
+  "description": "Chuẩn hóa và xử lý truy vấn tiếng Việt không dấu, viết lại câu hỏi hội thoại có đại từ, query rewriting, HyDE, Query2doc, multi-query kèm RRF, tách câu hỏi nhiều bước, step-back prompting, định tuyến và trích bộ lọc metadata — kèm chi phí độ trễ và khi nào không nên dùng.",
+  "lead": "Câu người dùng gõ vào ô chat hiếm khi là truy vấn tốt: quá ngắn, thiếu dấu, dùng “nó”, “cái đó”, gộp ba ý vào một câu, hoặc dùng từ khác hẳn tài liệu. Xử lý truy vấn là tầng biến câu hỏi đó thành một hoặc nhiều truy vấn phù hợp với chỉ mục. Mỗi kỹ thuật giải quyết một loại lỗi cụ thể và đều có giá — bài này giúp bạn chọn đúng kỹ thuật cho đúng vấn đề.",
+  "level": "Trung cấp",
+  "reviewed": "2026-10-22",
+  "kinds": ["nen-tang", "nghien-cuu", "kinh-nghiem", "nhan-dinh"]
+}
+---
+<div class="callout tom-tat">
+<ul>
+<li>Bắt đầu bằng các bước <strong>rẻ, không cần LLM</strong>: chuẩn hóa Unicode, xử lý chữ không dấu, viết tắt phổ biến. Chúng sửa được nhiều lỗi tiếng Việt thực tế.</li>
+<li><strong>Viết lại câu hỏi hội thoại</strong> (condensation) gần như bắt buộc với chatbot nhiều lượt: “Nó có miễn phí năm đầu không?” không thể truy hồi được nếu không biết “nó” là gì.</li>
+<li><strong>HyDE, Query2doc, multi-query, tách câu hỏi, step-back</strong> nhắm vào lệch từ vựng, câu mơ hồ và câu nhiều bước. Mỗi kỹ thuật thêm ít nhất một lượt gọi LLM và có thể làm <em>sai lệch</em> ý người hỏi.</li>
+<li><strong>Định tuyến và trích bộ lọc</strong> (“văn bản năm 2024 của NHNN”) giúp truy hồi chính xác hơn, nhưng bộ lọc do LLM sinh ra phải được kiểm tra hợp lệ và không bao giờ thay thế bộ lọc phân quyền.</li>
+<li>Chỉ thêm kỹ thuật khi số đo trên nhóm câu hỏi tương ứng cho thấy nó cải thiện. Luôn ghi log cả câu gốc lẫn câu đã xử lý.</li>
+</ul>
+</div>
+
+<h2>Vì sao câu hỏi của người dùng là truy vấn kém</h2>
+<p>Bộ truy hồi (BM25, embedding — xem [[link:tim-kiem/hybrid-search]]) so sánh <em>văn bản truy vấn</em> với <em>văn bản tài liệu</em>. Nó không biết ngữ cảnh hội thoại, không đoán ý, không sửa lỗi gõ. Một số dạng câu hỏi thực tế mà bộ truy hồi xử lý kém:</p>
+<table>
+<thead><tr><th>Dạng</th><th>Ví dụ</th><th>Vì sao truy hồi trượt</th></tr></thead>
+<tbody>
+<tr><td>Không dấu, viết tắt</td><td>“chinh sach doi tra hang loi”, “ck nhầm tk”</td><td>Token không khớp tài liệu có dấu; embedding có thể hiểu sai</td></tr>
+<tr><td>Phụ thuộc hội thoại</td><td>“Còn thẻ Gold thì sao?”</td><td>Thiếu chủ đề, chỉ có “thẻ Gold”</td></tr>
+<tr><td>Lệch từ vựng</td><td>“bị trừ tiền mà không mua gì”</td><td>Tài liệu viết “giao dịch không thành công nhưng tài khoản bị ghi nợ”</td></tr>
+<tr><td>Nhiều ý trong một câu</td><td>“So sánh phí rút tiền và lãi suất của gói A và gói B”</td><td>Một vector không đại diện tốt cho bốn mảnh thông tin</td></tr>
+<tr><td>Nhiều bước</td><td>“Người ký quyết định thành lập chi nhánh Đà Nẵng hiện giữ chức vụ gì?”</td><td>Thông tin bước 2 chỉ tìm được sau khi biết kết quả bước 1</td></tr>
+<tr><td>Chứa điều kiện lọc</td><td>“Các thông tư về cho vay ban hành năm 2024”</td><td>“năm 2024” nên là bộ lọc metadata, không phải từ để khớp ngữ nghĩa</td></tr>
+</tbody></table>
+<p>Mỗi dạng cần một cách xử lý khác nhau. Áp mọi kỹ thuật cho mọi câu hỏi vừa tốn kém vừa có thể làm hỏng các câu vốn đã tốt.</p>
+
+<h2>Bản đồ kỹ thuật và cái giá của chúng</h2>
+<table>
+<thead><tr><th>Kỹ thuật</th><th>Giải quyết</th><th>Lượt gọi LLM thêm</th><th>Độ trễ thêm (tương đối)</th><th>Rủi ro chính</th></tr></thead>
+<tbody>
+<tr><td>Chuẩn hóa văn bản</td><td>Lỗi mã hóa, khoảng trắng, chữ hoa</td><td>0</td><td>Không đáng kể</td><td>Gần như không</td></tr>
+<tr><td>Xử lý không dấu</td><td>Truy vấn gõ không dấu</td><td>0 (dùng chỉ mục bỏ dấu hoặc mô hình nhỏ khôi phục dấu)</td><td>Thấp</td><td>Khôi phục dấu sai (“thue” → thuê hay thuế?)</td></tr>
+<tr><td>Viết lại câu hội thoại</td><td>Đại từ, câu tỉnh lược</td><td>1</td><td>Một lượt sinh ngắn</td><td>Hiểu sai chủ đề đang bàn</td></tr>
+<tr><td>Query rewriting</td><td>Lệch từ vựng, câu lủng củng</td><td>1</td><td>Một lượt sinh ngắn</td><td>Thay đổi ý câu hỏi</td></tr>
+<tr><td>HyDE / Query2doc</td><td>Câu hỏi ngắn, khác “văn phong” tài liệu</td><td>1</td><td>Một lượt sinh dài hơn (đoạn văn giả)</td><td>Chi tiết bịa kéo truy hồi lệch hướng</td></tr>
+<tr><td>Multi-query + RRF</td><td>Câu mơ hồ, nhiều cách hiểu</td><td>1 (+ n lượt truy hồi song song)</td><td>Trung bình</td><td>Truy vấn sinh ra lạc đề</td></tr>
+<tr><td>Tách câu hỏi</td><td>Nhiều ý, nhiều bước</td><td>1 hoặc nhiều (có thể tuần tự)</td><td>Trung bình–cao</td><td>Tách sai; lỗi cộng dồn qua các bước</td></tr>
+<tr><td>Step-back</td><td>Cần nguyên tắc/khái niệm nền</td><td>1 (+ 1 lượt truy hồi)</td><td>Trung bình</td><td>Truy hồi quá chung chung</td></tr>
+<tr><td>Định tuyến, trích bộ lọc</td><td>Nhiều nguồn dữ liệu; điều kiện thời gian, loại văn bản</td><td>1 (đầu ra có cấu trúc)</td><td>Một lượt sinh ngắn</td><td>Bộ lọc sai loại bỏ tài liệu đúng</td></tr>
+</tbody></table>
+<p>Cột “độ trễ thêm” mang tính tương đối; con số thật phụ thuộc mô hình, độ dài đầu ra và hạ tầng. Có thể giảm bằng cách dùng mô hình nhỏ cho bước xử lý truy vấn, chạy song song các nhánh độc lập, và cache kết quả cho câu hỏi lặp lại — xem [[link:van-hanh/chi-phi-do-tre]].</p>
+
+<h2>Bước rẻ trước: chuẩn hóa và tiếng Việt không dấu</h2>
+<h3>Chuẩn hóa văn bản</h3>
+<div class="callout nen-tang">
+<p>Chữ tiếng Việt có dấu có thể được mã hóa Unicode theo hai cách: <strong>dựng sẵn</strong> (một ký tự cho “ệ”) hoặc <strong>tổ hợp</strong> (chữ “e” cộng các dấu kết hợp). Hai chuỗi trông giống hệt nhau trên màn hình nhưng khác nhau từng byte, nên BM25 coi là hai token khác nhau và tokenizer của mô hình embedding có thể tách khác nhau. Văn bản sao chép từ PDF, Word hoặc gõ bằng các bộ gõ khác nhau thường lẫn lộn hai dạng. Chuẩn hóa về một dạng (thường là NFC) cho <em>cả tài liệu lẫn truy vấn</em> là bước nền tảng — xem thêm [[link:du-lieu/thu-thap-lam-sach]].</p>
+</div>
+<p>Các bước chuẩn hóa khác: gộp khoảng trắng thừa, thống nhất chữ hoa/thường cho nhánh BM25, chuẩn hóa định dạng số và tiền (“1.500.000đ”, “1,5 triệu”), và bảng viết tắt riêng của miền (“tk” → tài khoản, “ck” → chuyển khoản, “stk” → số tài khoản). Bảng viết tắt nên được xây từ log truy vấn thật.</p>
+
+<h3>Truy vấn không dấu: “chinh sach doi tra”</h3>
+<p>Người dùng điện thoại hay gõ không dấu. Có bốn hướng, thường kết hợp:</p>
+<ol>
+<li><strong>Chỉ mục song song đã bỏ dấu</strong> cho nhánh BM25: thêm một trường mà mọi token đã bỏ dấu, như bộ lọc <code>asciifolding</code> của Elasticsearch (có tùy chọn giữ cả token gốc)[[cite:esasciifolding]]. Truy vấn không dấu khớp trường này; truy vấn có dấu ưu tiên trường có dấu. Kiểm tra riêng chữ “đ/Đ” vì không phải bộ bỏ dấu nào cũng xử lý giống nhau.</li>
+<li><strong>Khôi phục dấu</strong> trước khi truy hồi. underthesea có chức năng khôi phục dấu[[cite:underthesea]]; pyvi có hàm <code>ViUtils.add_accents</code> (và <code>remove_accents</code> theo chiều ngược lại)[[cite:pyvi]]. Rủi ro là nhập nhằng: “thue nha” có thể là “thuê nhà” hoặc “thuế nhà”; “ban” có thể là bàn, bán, bạn, bản, bận.</li>
+<li><strong>Để LLM viết lại</strong> câu hỏi kèm dấu, cùng lúc với các bước viết lại khác (xem phần dưới). Tốn một lượt gọi nhưng tận dụng được ngữ cảnh hội thoại để chọn dấu đúng.</li>
+<li><strong>Dựa vào mô hình embedding</strong>: một số mô hình đa ngôn ngữ xử lý được một phần văn bản không dấu, nhưng không nên giả định — hãy đo.</li>
+</ol>
+<div class="callout kinh-nghiem">
+<p><strong>Đo trước khi chọn.</strong> Thực hành hữu ích: lấy bộ câu hỏi kiểm thử có dấu, tạo bản sao không dấu bằng hàm bỏ dấu, rồi chạy cả hai qua hệ thống. Khoảng cách Recall@k giữa hai bản cho biết hệ thống của bạn “mất” bao nhiêu khi người dùng gõ không dấu — và kỹ thuật nào thu hẹp được khoảng cách đó. Với câu nhập nhằng như “thue”, cách an toàn là truy hồi theo cả hai cách hiểu rồi hợp nhất, hoặc hỏi lại người dùng.</p>
+</div>
+
+<h2>Viết lại câu hỏi trong hội thoại</h2>
+<p>Trong trợ lý nhiều lượt, câu hỏi sau thường phụ thuộc câu trước:</p>
+<pre><code>Người dùng: Thẻ tín dụng Platinum phí thường niên bao nhiêu?
+Trợ lý:     Theo biểu phí hiện hành, thẻ Platinum có phí thường niên ...
+Người dùng: Còn thẻ Gold thì sao?
+Người dùng: Nó có miễn phí năm đầu không?</code></pre>
+<p>Truy hồi với “Nó có miễn phí năm đầu không?” gần như vô nghĩa. Bước <strong>condensation</strong> (cô đọng) dùng LLM viết lại câu cuối thành một câu <em>độc lập</em>: “Thẻ tín dụng Gold có được miễn phí thường niên năm đầu không?”. Bài toán này được định nghĩa rõ trong nghiên cứu hỏi đáp hội thoại: Elgohary và cộng sự (2019) gọi là viết lại câu hỏi-trong-ngữ-cảnh — chuyển câu hỏi phụ thuộc lịch sử hội thoại thành câu độc lập có cùng đáp án — và xây bộ dữ liệu CANARD với 40.527 câu hỏi[[cite:elgohary2019]].</p>
+<pre><code>Bạn viết lại câu hỏi cuối cùng của người dùng thành MỘT câu hỏi độc lập,
+đầy đủ chủ ngữ, tiếng Việt có dấu, giữ nguyên ý và mọi mã/số/tên riêng.
+Không trả lời câu hỏi. Nếu câu hỏi đã độc lập, chép lại nguyên văn.
+
+Lịch sử hội thoại:
+{3–5 lượt gần nhất}
+
+Câu hỏi cuối: {câu hỏi}
+Câu hỏi độc lập:</code></pre>
+<div class="callout canh-bao">
+<p><strong>Lỗi thường gặp:</strong> (1) đưa quá nhiều lịch sử khiến mô hình kéo chủ đề cũ vào câu hỏi mới — người dùng đã chuyển sang hỏi về vay mua nhà nhưng câu viết lại vẫn chứa “thẻ Gold”; (2) mô hình “trả lời luôn” thay vì viết lại; (3) mô hình làm mất mã số, đổi “Gold” thành “Vàng”. Ghi log câu gốc và câu viết lại, và đưa các trường hợp này vào bộ kiểm thử.</p>
+</div>
+
+<h2>Viết lại và mở rộng truy vấn</h2>
+<h3>Query rewriting</h3>
+<p>Ý tưởng chung: thêm một bước biến câu hỏi thành truy vấn phù hợp hơn với bộ truy hồi — sửa lỗi, thêm thuật ngữ chuẩn của miền, bỏ phần thừa. Ma và cộng sự (EMNLP 2023) gọi khung này là Rewrite-Retrieve-Read: thay vì chỉnh bộ truy hồi hay bộ đọc, họ điều chỉnh chính truy vấn, vì “luôn có khoảng cách giữa văn bản đầu vào và tri thức cần truy hồi”. Họ dùng LLM sinh truy vấn cho máy tìm kiếm web, và huấn luyện một mô hình nhỏ làm bộ viết lại bằng học tăng cường từ phản hồi của LLM đọc; tác giả báo cáo cải thiện nhất quán trên các tác vụ hỏi đáp miền mở và trắc nghiệm[[cite:ma2023rewrite]].</p>
+<p>Ví dụ: “bị trừ tiền mà không mua gì” → “giao dịch thất bại nhưng tài khoản bị trừ tiền, khiếu nại hoàn tiền”. Trong thực tế, nhiều hệ thống dùng LLM sẵn có với prompt thay vì huấn luyện bộ viết lại riêng; muốn biết cách nào tốt hơn thì phải đo.</p>
+
+<h3>HyDE và Query2doc: truy hồi bằng một “câu trả lời giả”</h3>
+<p>Câu hỏi ngắn và tài liệu dài khác nhau về văn phong. Hai kỹ thuật dưới đây cho LLM viết trước một đoạn văn trông giống tài liệu trả lời câu hỏi, rồi dùng đoạn đó để tìm.</p>
+<div class="callout nghien-cuu">
+<ul>
+<li><strong>HyDE</strong> (Gao và cộng sự, 2022): cho một mô hình làm theo chỉ dẫn (InstructGPT) viết một tài liệu giả định trả lời câu hỏi, không cần ví dụ; tài liệu này “nắm được mẫu liên quan nhưng không có thật và có thể chứa chi tiết sai”. Một bộ mã hóa tương phản không giám sát (Contriever) embed tài liệu giả đó, và hệ thống tìm các tài liệu thật gần nó. Tác giả báo cáo HyDE vượt đáng kể Contriever và tương đương một số bộ truy hồi đã fine-tune, trên các tác vụ tìm kiếm web, hỏi đáp, kiểm chứng sự kiện và một số ngôn ngữ (tiếng Swahili, Hàn, Nhật)[[cite:gao2022hyde]]. Điều kiện quan trọng: thiết lập <em>zero-shot</em>, không có nhãn liên quan.</li>
+<li><strong>Query2doc</strong> (Wang và cộng sự, EMNLP 2023): dùng vài ví dụ để LLM sinh tài liệu giả, rồi <em>ghép</em> vào truy vấn gốc. Tác giả báo cáo BM25 tăng 3–15% trên MS MARCO và TREC DL mà không fine-tune mô hình nào, và các bộ truy hồi dense cũng cải thiện[[cite:wang2023query2doc]].</li>
+</ul>
+</div>
+<p>Giới hạn quan trọng với RAG doanh nghiệp: kỹ thuật này dựa vào kiến thức <em>có sẵn trong LLM</em> để viết đoạn giả. Với dữ liệu nội bộ — tên sản phẩm riêng, quy trình riêng của công ty — LLM không biết, đoạn giả sẽ chứa nội dung chung chung hoặc bịa, có thể kéo truy hồi về các tài liệu sai. Ngoài ra, sinh một đoạn văn dài tốn thời gian hơn nhiều so với viết lại một câu. Query2doc giữ lại truy vấn gốc nên ít rủi ro “lạc đề” hơn HyDE thuần.</p>
+
+<h3>Multi-query và hợp nhất kết quả</h3>
+<p>Với câu mơ hồ, có thể sinh vài cách diễn đạt khác nhau, truy hồi song song cho từng cách, rồi hợp nhất bằng Reciprocal Rank Fusion (xem cơ chế và công cụ thử ở [[link:tim-kiem/hybrid-search]]). Ví dụ “thẻ bị khóa” → (1) “thẻ ATM bị khóa do nhập sai mã PIN”, (2) “thẻ tín dụng bị tạm khóa do nghi ngờ gian lận”, (3) “cách mở khóa thẻ ngân hàng”.</p>
+<div class="callout nghien-cuu">
+<p>RAG-Fusion (Rackauckas, 2024) là một case study tại Infineon: hệ thống sinh nhiều truy vấn từ câu hỏi gốc, xếp hạng lại bằng điểm nghịch đảo thứ hạng rồi hợp nhất tài liệu. Câu trả lời được đánh giá <em>thủ công</em> về độ chính xác, liên quan và đầy đủ; tác giả ghi nhận câu trả lời đầy đủ hơn nhờ nhìn câu hỏi từ nhiều góc, nhưng cũng ghi nhận hạn chế: một số câu trả lời lạc đề khi các truy vấn sinh ra không đủ liên quan tới câu hỏi gốc[[cite:rackauckas2024]]. Đây là bằng chứng từ một bối cảnh cụ thể, đánh giá định tính — chưa phải kết quả benchmark tổng quát.</p>
+</div>
+
+<h2>Tách câu hỏi nhiều ý và nhiều bước</h2>
+<p><strong>Câu hỏi nhiều ý</strong> (song song): “So sánh phí rút tiền và lãi suất của gói A và gói B” có thể tách thành bốn truy vấn độc lập — phí rút tiền gói A, phí rút tiền gói B, lãi suất gói A, lãi suất gói B — truy hồi song song, rồi gộp ngữ cảnh. Không phụ thuộc thứ tự nên độ trễ chỉ thêm một lượt LLM.</p>
+<p><strong>Câu hỏi nhiều bước</strong> (tuần tự, multi-hop): “Người ký quyết định thành lập chi nhánh Đà Nẵng hiện giữ chức vụ gì?” phải tìm (1) quyết định thành lập chi nhánh và người ký, rồi (2) chức vụ hiện tại của người đó. Truy vấn bước 2 chỉ viết được sau khi có kết quả bước 1.</p>
+<div class="callout nghien-cuu">
+<p>Press và cộng sự định nghĩa <strong>khoảng cách tổ hợp</strong> (compositionality gap): tỷ lệ trường hợp mô hình trả lời đúng mọi câu hỏi con nhưng vẫn sai câu hỏi tổng. Trên các mô hình GPT-3, độ chính xác câu hỏi một bước tăng nhanh hơn câu hỏi nhiều bước khi tăng kích thước, nên khoảng cách này không thu hẹp. Phương pháp <strong>self-ask</strong> của họ cho mô hình tự đặt và trả lời các câu hỏi phụ trước khi trả lời câu chính; vì định dạng có cấu trúc, các câu hỏi phụ có thể được trả lời bằng công cụ tìm kiếm, cải thiện độ chính xác thêm nữa[[cite:press2022]].</p>
+</div>
+<p>Trong RAG, đây là cầu nối sang truy hồi lặp và agent: hệ thống quyết định truy vấn tiếp theo dựa trên kết quả trước. Thiết kế đó, cùng rủi ro lỗi cộng dồn và chi phí, được bàn ở [[link:nang-cao/agentic-graphrag]]. Với pipeline cố định, cách thực dụng là chỉ kích hoạt tách câu khi bộ phân loại (hoặc LLM) nhận diện câu hỏi có nhiều thực thể/nhiều ý.</p>
+
+<h2>Step-back: lùi một bước để hỏi điều khái quát</h2>
+<p>Có những câu hỏi rất cụ thể mà tài liệu chỉ trả lời gián tiếp qua nguyên tắc chung. Ví dụ: “Nhân viên nghỉ việc ngày 15/3 có được trả lương tháng 13 không?”. Có thể không tài liệu nào nhắc ngày 15/3, nhưng quy chế lương thưởng có mục “Điều kiện hưởng lương tháng 13 khi chấm dứt hợp đồng giữa năm”. Câu hỏi “lùi một bước” — “Quy định về lương tháng 13 cho nhân viên nghỉ việc trong năm” — truy hồi tốt hơn.</p>
+<div class="callout nghien-cuu">
+<p>Zheng và cộng sự (ICLR 2024) đề xuất Step-Back Prompting: cho mô hình trừu tượng hóa để rút ra khái niệm và nguyên lý bậc cao trước, rồi dùng chúng dẫn dắt lập luận. Thử trên PaLM-2L, GPT-4 và Llama2-70B với các tác vụ STEM, hỏi đáp tri thức và lập luận nhiều bước; với PaLM-2L, tác giả báo cáo cải thiện +7% trên MMLU Vật lý, +11% trên MMLU Hóa học, +27% trên TimeQA và +7% trên MuSiQue[[cite:zheng2023stepback]]. Đây là kết quả về lập luận trên các benchmark tiếng Anh; áp dụng cho truy hồi trong RAG là một cách dùng ý tưởng này, cần đo riêng.</p>
+</div>
+<p>Cách dùng phổ biến trong RAG: truy hồi bằng <em>cả</em> câu gốc lẫn câu step-back, rồi hợp nhất, để vừa có đoạn nguyên tắc chung vừa không mất đoạn khớp chi tiết.</p>
+
+<h2>Định tuyến và trích bộ lọc metadata</h2>
+<p>Khi có nhiều nguồn — kho chính sách, kho câu hỏi thường gặp, cơ sở dữ liệu sản phẩm, API tra số dư — bước <strong>định tuyến</strong> (routing) quyết định câu hỏi đi đâu. “Số dư tài khoản của tôi” nên gọi API, không nên tìm trong tài liệu; “phí chuyển tiền quốc tế” nên vào kho biểu phí.</p>
+<p>Một biến thể quan trọng là <strong>trích bộ lọc</strong> từ câu hỏi — một số framework gọi là “self-query”: LLM tách câu hỏi thành phần ngữ nghĩa để tìm và phần điều kiện để lọc metadata.</p>
+<pre><code>Câu hỏi: "Các thông tư của NHNN về cho vay tiêu dùng ban hành năm 2024"
+
+Đầu ra có cấu trúc (JSON):
+{
+  "query": "quy định cho vay tiêu dùng",
+  "filters": {
+    "co_quan_ban_hanh": "NHNN",
+    "loai_van_ban": "Thông tư",
+    "nam_ban_hanh": 2024
+  }
+}</code></pre>
+<div class="callout canh-bao">
+<p><strong>Bộ lọc do LLM sinh ra phải được kiểm tra.</strong> (1) Kiểm tra theo lược đồ: tên trường và giá trị phải thuộc danh sách cho phép (“Thông tư” chứ không phải “thông tư số”); giá trị không hợp lệ thì bỏ bộ lọc đó thay vì trả về rỗng. (2) Bộ lọc sai lặng lẽ loại bỏ tài liệu đúng — ví dụ người dùng nói “năm ngoái” và mô hình không biết hôm nay là ngày nào. Cung cấp ngày hiện tại trong prompt. (3) Bộ lọc <strong>phân quyền</strong> không bao giờ được lấy từ đầu ra LLM; nó phải đến từ danh tính người dùng đã xác thực và được áp bắt buộc ở tầng truy hồi — xem [[link:van-hanh/bao-mat]]. Câu hỏi có thể chứa chỉ thị cố tình như “bỏ qua bộ lọc phòng ban”.</p>
+</div>
+<p>Trích bộ lọc chỉ hiệu quả khi metadata đã được thiết kế và gắn nhất quán khi lập chỉ mục — xem [[link:du-lieu/metadata-va-bieu-dien]]. Với lọc metadata kết hợp tìm vector, cũng cần chú ý vấn đề lọc sau khi tìm ANN đã nêu ở [[link:truy-hoi/vector-index]].</p>
+
+<h2>Ghép lại thành một tầng xử lý truy vấn</h2>
+<figure class="diagram">
+<svg viewBox="0 0 740 230" width="740" role="img" aria-labelledby="qp1t qp1d">
+<title id="qp1t">Một tầng xử lý truy vấn điển hình</title>
+<desc id="qp1d">Câu hỏi đi qua chuẩn hóa không cần LLM, sau đó một lượt LLM duy nhất vừa viết lại câu hội thoại, vừa phân loại, vừa trích bộ lọc. Tùy kết quả phân loại, câu hỏi được truy hồi trực tiếp, tách thành nhiều truy vấn, hoặc định tuyến sang API. Các truy vấn sau đó đi vào hybrid search.</desc>
+<defs><marker id="qpah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="arrowhead"/></marker></defs>
+<rect x="20" y="85" width="110" height="56" rx="8" class="box-b"/><text x="75" y="109" font-size="14" text-anchor="middle">Câu hỏi</text><text x="75" y="127" font-size="11.5" text-anchor="middle" class="muted">+ lịch sử</text>
+<rect x="160" y="85" width="120" height="56" rx="8" class="box"/><text x="220" y="109" font-size="14" text-anchor="middle">Chuẩn hóa</text><text x="220" y="127" font-size="11.5" text-anchor="middle" class="muted">NFC, viết tắt, dấu</text>
+<rect x="310" y="70" width="150" height="86" rx="8" class="box-a"/><text x="385" y="98" font-size="14" text-anchor="middle" font-weight="700">1 lượt LLM</text><text x="385" y="116" font-size="11.5" text-anchor="middle" class="muted">viết lại độc lập</text><text x="385" y="132" font-size="11.5" text-anchor="middle" class="muted">phân loại + bộ lọc</text>
+<rect x="500" y="20" width="110" height="46" rx="8" class="box"/><text x="555" y="48" font-size="12.5" text-anchor="middle">Truy hồi thẳng</text>
+<rect x="500" y="90" width="110" height="46" rx="8" class="box"/><text x="555" y="118" font-size="12.5" text-anchor="middle">Tách truy vấn</text>
+<rect x="500" y="160" width="110" height="46" rx="8" class="box"/><text x="555" y="188" font-size="12.5" text-anchor="middle">Gọi API / SQL</text>
+<rect x="640" y="55" width="90" height="56" rx="8" class="box-w"/><text x="685" y="79" font-size="13" text-anchor="middle">Hybrid</text><text x="685" y="97" font-size="11.5" text-anchor="middle" class="muted">search</text>
+<path d="M130 113 H158M280 113 H308" class="ln" marker-end="url(#qpah)"/>
+<path d="M460 95 L498 45M460 113 H498M460 131 L498 181" class="ln" marker-end="url(#qpah)"/>
+<path d="M610 43 L638 74M610 113 L638 93" class="ln" marker-end="url(#qpah)"/>
+</svg>
+<figcaption>Gộp nhiều bước xử lý vào một lượt LLM có đầu ra cấu trúc giúp giảm độ trễ; các nhánh tốn kém chỉ kích hoạt khi cần.</figcaption>
+</figure>
+<div class="callout kinh-nghiem">
+<p><strong>Gộp lượt gọi, kích hoạt có điều kiện.</strong> Một mẫu thiết kế phổ biến: một lượt LLM nhỏ trả về JSON gồm câu hỏi độc lập (có dấu), loại câu hỏi (đơn / nhiều ý / cần dữ liệu có cấu trúc / ngoài phạm vi) và bộ lọc. Các kỹ thuật đắt hơn (HyDE, multi-query, tách nhiều bước) chỉ chạy cho loại câu hỏi tương ứng, hoặc khi truy hồi lần đầu cho điểm reranker thấp. Luôn giữ câu hỏi <em>gốc</em> như một truy vấn song song để không mất trường hợp câu gốc vốn đã tốt.</p>
+</div>
+
+<h2>Khi nào không nên dùng</h2>
+<ul>
+<li><strong>Câu hỏi đã chính xác</strong>: chứa mã sản phẩm, số hiệu văn bản, tên riêng. Viết lại có thể làm mất hoặc sửa sai chuỗi quan trọng nhất. Ít nhất hãy kiểm tra mọi mã/số trong câu gốc vẫn còn trong câu viết lại.</li>
+<li><strong>Ngân sách độ trễ chặt</strong>: tìm kiếm gợi ý khi gõ, tra cứu nội bộ cần phản hồi tức thì. Mỗi lượt LLM thêm đáng kể so với thời gian truy hồi.</li>
+<li><strong>Truy hồi đã tốt</strong>: nếu Recall@k trên bộ kiểm thử đã cao, kỹ thuật thêm vào chủ yếu thêm chi phí và rủi ro. Kiểm tra bằng số đo theo nhóm câu hỏi ([[link:danh-gia/do-luong-retrieval]]).</li>
+<li><strong>Kiến thức hoàn toàn nội bộ</strong> với HyDE: LLM không biết nội dung để viết đoạn giả hữu ích.</li>
+<li><strong>Miền rủi ro cao</strong> (pháp lý, y tế, tài chính): viết lại có thể đổi nghĩa tinh tế (“được” ↔ “phải”, “tối đa” ↔ “tối thiểu”). Nếu dùng, nên hiển thị cho người dùng câu hỏi hệ thống đã hiểu.</li>
+</ul>
+
+<div class="callout nhan-dinh">
+<p>Theo nhận định của người biên soạn, với chatbot tiếng Việt, hai bước mang lại giá trị rõ nhất thường là (1) chuẩn hóa + xử lý không dấu và (2) viết lại câu hội thoại thành câu độc lập; các kỹ thuật như HyDE hay multi-query nên đến sau, khi đã có bộ kiểm thử chỉ ra loại câu hỏi mà chúng giúp. Nhiều hệ thống “nâng cao” chậm và đắt vì xếp chồng mọi kỹ thuật cho mọi câu hỏi. Đây là nhận định thực hành, không phải kết quả nghiên cứu.</p>
+</div>
+
+<h2>Tự kiểm tra hiểu biết</h2>
+<div class="callout kiem-chung">
+<ol>
+<li>Vì sao hai chuỗi “hoà” trông giống hệt nhau lại có thể không khớp trong BM25? Bước nào khắc phục?</li>
+<li>Viết lại câu “Thế còn hạn mức rút tiền của nó?” trong hội thoại mà câu trước hỏi về thẻ ghi nợ nội địa. Những gì cần được giữ nguyên?</li>
+<li>Vì sao HyDE có thể kém trên kho tài liệu nội bộ của một công ty, dù hiệu quả trên benchmark web?</li>
+<li>Hôm nay là năm 2026, nhưng LLM trích bộ lọc <code>{"nam_ban_hanh": 2024}</code> từ câu “văn bản năm ngoái”. Lỗi có thể nằm ở đâu và bạn phòng thế nào? (Gợi ý: mô hình không biết ngày hiện tại và đoán theo dữ liệu huấn luyện.)</li>
+<li>Thí nghiệm: tạo bản không dấu của bộ câu hỏi kiểm thử. Đo Recall@10 cho (a) câu có dấu, (b) câu không dấu, (c) câu không dấu sau khi khôi phục dấu hoặc viết lại bằng LLM. Kỹ thuật nào thu hẹp khoảng cách nhiều nhất, với chi phí bao nhiêu?</li>
+</ol>
+</div>
+
+<h2>Đọc tiếp</h2>
+<ul>
+<li>Bài tiếp theo: [[link:sinh/xay-dung-context]] — sau khi truy hồi, sắp xếp đoạn văn vào prompt.</li>
+<li>Truy vấn đã xử lý đi vào đâu: [[link:tim-kiem/hybrid-search]] và [[link:tim-kiem/reranking]].</li>
+<li>Khi một lượt truy hồi không đủ: [[link:nang-cao/agentic-graphrag]].</li>
+<li>Lần ra lỗi do truy vấn hay do truy hồi: [[link:danh-gia/chan-doan-loi]].</li>
+<li>Tài liệu gốc: Rewrite-Retrieve-Read[[cite:ma2023rewrite]], HyDE[[cite:gao2022hyde]], Query2doc[[cite:wang2023query2doc]], Step-Back[[cite:zheng2023stepback]], self-ask[[cite:press2022]], CANARD[[cite:elgohary2019]]; khảo sát tổng quan về các kỹ thuật “Advanced RAG”: Gao et al. 2023[[cite:gao2023survey]].</li>
+</ul>

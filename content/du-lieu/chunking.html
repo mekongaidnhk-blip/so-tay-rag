@@ -1,0 +1,183 @@
+---
+{
+  "title": "Chunking: cắt tài liệu thế nào cho truy hồi tốt?",
+  "navTitle": "Chunking",
+  "description": "Vì sao phải cắt tài liệu, các chiến lược cố định, theo câu, đệ quy theo cấu trúc, theo ngữ nghĩa; kích thước và overlap; token và ký tự với tiếng Việt; bảng, mã nguồn; parent-child, late chunking; và cách đánh giá lựa chọn chunking.",
+  "lead": "Không có kích thước chunk “đúng” cho mọi hệ thống. Có những ranh giới cắt làm hỏng nghĩa, những cấu hình mặc định kém hiệu quả đã được đo, và một quy trình để tìm cấu hình phù hợp với dữ liệu và câu hỏi của bạn. Bài này đi qua cả ba, kèm một công cụ để bạn tự thử.",
+  "level": "Trung cấp",
+  "reviewed": "2026-10-22",
+  "kinds": ["nen-tang", "nghien-cuu", "kinh-nghiem", "nhan-dinh"]
+}
+---
+<div class="callout tom-tat">
+<ul>
+<li>Chunk (đoạn cắt) là đơn vị được embedding, tìm kiếm và đưa vào prompt. Chunk quá to thì vector bị “pha loãng” và tốn ngữ cảnh; quá nhỏ thì mất ngữ cảnh cần để hiểu và trả lời.</li>
+<li>Thứ tự ưu tiên thực tế: <strong>tôn trọng cấu trúc tài liệu</strong> (chương, điều, mục, đoạn) trước, rồi mới giới hạn kích thước. Cắt cố định theo ký tự là baseline, hiếm khi là đích.</li>
+<li>Bằng chứng công bố cho thấy lựa chọn chunking có thể làm recall chênh vài điểm phần trăm và cấu hình mặc định phổ biến chưa chắc tốt — nhưng con số “tối ưu” khác nhau giữa các nghiên cứu vì khác dữ liệu và chỉ số.</li>
+<li>Có thể tách <em>đơn vị tìm kiếm</em> khỏi <em>đơn vị trả về</em> (parent-child), hoặc cho vector mỗi chunk “nhìn thấy” cả tài liệu (late chunking, contextual retrieval).</li>
+<li>Chọn chunking bằng đánh giá trên bộ câu hỏi của bạn, với nhãn gắn theo vị trí văn bản chứ không theo mã chunk.</li>
+</ul>
+</div>
+
+<h2>Vì sao phải cắt tài liệu</h2>
+<p>Có ba lý do độc lập, và hiểu chúng giúp bạn biết khi nào có thể nới lỏng từng lý do:</p>
+<ol>
+<li><strong>Giới hạn và độ “sắc” của embedding.</strong> Mô hình embedding có độ dài đầu vào tối đa; phần vượt quá thường bị cắt bỏ âm thầm. Ngay cả trong giới hạn, một vector duy nhất cho 20 trang phải tóm mọi chủ đề vào một điểm — câu hỏi về một chi tiết nhỏ khó khớp với nó. Tác giả của late chunking cũng nêu nhận xét chung rằng các bộ truy hồi dense thường hoạt động tốt hơn với đoạn văn ngắn[[cite:gunther2024late]].</li>
+<li><strong>Ngân sách ngữ cảnh.</strong> Prompt chỉ chứa được một lượng token có hạn, và mỗi token tốn tiền và thời gian. Đưa 5 đoạn 300 token rẻ hơn rất nhiều so với 5 tài liệu 10.000 token. Thêm nữa, đoạn không liên quan có thể làm mô hình trả lời kém đi[[cite:shi2023]].</li>
+<li><strong>Độ chính xác của trích dẫn.</strong> “Xem Quy chế công tác phí” kém hữu ích hơn “Xem Điều 5, Khoản 2”. Chunk nhỏ, có ranh giới rõ, cho trích dẫn kiểm chứng được.</li>
+</ol>
+<p>Ngược lại, chunk quá nhỏ cũng hỏng: “Mức phụ cấp là 200.000 đồng/ngày” đứng một mình không cho biết phụ cấp gì, áp dụng cho ai, từ khi nào. Chunking là bài toán cân bằng giữa <em>tập trung</em> và <em>đủ ngữ cảnh</em>. Bài [[link:du-lieu/metadata-va-bieu-dien]] trình bày cách bù ngữ cảnh cho chunk nhỏ.</p>
+
+<h2>Đơn vị đo: ký tự, từ hay token?</h2>
+<div class="callout nen-tang">
+<p><strong>Token</strong> là đơn vị mà mô hình thực sự xử lý, do tokenizer (bộ tách token) của từng mô hình quyết định. Giới hạn đầu vào của mô hình embedding và chi phí LLM đều tính bằng token. Cùng một đoạn văn có thể ra số token khác nhau trên các mô hình khác nhau.</p>
+</div>
+<p>Với tiếng Việt có thêm hai điểm cần nhớ:</p>
+<ul>
+<li><strong>Khoảng trắng tách âm tiết, không tách từ.</strong> “Thẻ tín dụng quốc tế” là 5 âm tiết nhưng 3 từ. Nếu thư viện chunking đếm “từ” bằng cách tách theo khoảng trắng, nó đang đếm âm tiết. Không sai, nhưng các con số kinh nghiệm viết cho tiếng Anh (“chunk 300 từ”) không chuyển thẳng sang được. Các công cụ như VnCoreNLP cung cấp tách từ thực sự cho tiếng Việt[[cite:vu2018vncorenlp]], hữu ích cho BM25 hơn là cho chunking.</li>
+<li><strong>Tỷ lệ token/ký tự khác tiếng Anh.</strong> Tokenizer của nhiều mô hình được huấn luyện chủ yếu trên tiếng Anh, nên văn bản tiếng Việt có dấu có thể tốn nhiều token hơn cho cùng lượng nội dung. Mức chênh phụ thuộc tokenizer — hãy đếm bằng chính tokenizer của mô hình embedding và LLM bạn dùng trên một mẫu tài liệu, thay vì dùng hệ số quy đổi chung.</li>
+</ul>
+<p>Thực hành phổ biến: <em>cắt</em> theo ranh giới ngôn ngữ (câu, đoạn, mục), <em>giới hạn</em> kích thước bằng token của mô hình embedding. Công cụ bên dưới dùng ký tự cho dễ quan sát.</p>
+
+<h2>Các chiến lược chunking</h2>
+
+<h3>Cố định theo độ dài (fixed-size)</h3>
+<p>Cắt mỗi N ký tự hoặc N token, có thể chồng lấp (overlap) M đơn vị giữa hai chunk liền kề. Đơn giản, dự đoán được kích thước, nhưng cắt ngang câu, ngang từ, ngang hàng bảng. Overlap giảm rủi ro một ý bị chẻ đôi, đổi lại tăng dung lượng chỉ mục và tạo các chunk gần trùng nhau cạnh tranh trong top-k.</p>
+
+<h3>Theo câu, gộp tới giới hạn</h3>
+<p>Tách văn bản thành câu, rồi gộp các câu liên tiếp cho tới khi gần chạm giới hạn kích thước. Không bao giờ cắt giữa câu. Cần bộ tách câu hiểu tiếng Việt: dấu chấm trong “TP. HCM”, “Nghị định số 13/2023/NĐ-CP”, “1.000.000 đồng” không phải ranh giới câu.</p>
+
+<h3>Đệ quy theo cấu trúc (recursive / structure-aware)</h3>
+<p>Thử cắt theo ranh giới lớn nhất trước (chương → mục → đoạn → câu → từ); chỉ khi một phần vẫn quá lớn mới xuống cấp nhỏ hơn. Với tài liệu có cấu trúc rõ — văn bản pháp luật (Chương, Mục, Điều, Khoản, Điểm), quy chế nội bộ, tài liệu kỹ thuật có heading — đây thường là lựa chọn tốt nhất, vì ranh giới cấu trúc trùng với ranh giới ý. Một “Điều” trong nghị định là đơn vị mà người dùng trích dẫn, nên cũng là đơn vị chunk tự nhiên; Điều quá dài thì tách theo Khoản, và giữ tiêu đề Điều ở mỗi phần (xem [[link:du-lieu/metadata-va-bieu-dien]]).</p>
+<p>Điều kiện tiên quyết: khâu trích xuất phải giữ được cấu trúc (heading, danh sách, bảng). Nếu văn bản đã bị làm phẳng thành một chuỗi, không còn gì để “tôn trọng” — quay lại [[link:du-lieu/thu-thap-lam-sach]].</p>
+
+<h3>Theo ngữ nghĩa (semantic chunking)</h3>
+<p>Dùng embedding để tìm chỗ chủ đề thay đổi: tính độ tương đồng giữa các câu liên tiếp và cắt ở chỗ độ tương đồng giảm mạnh; hoặc gom các câu để tối đa hóa độ tương đồng bên trong chunk; hoặc nhờ LLM chọn điểm cắt. Hấp dẫn về ý tưởng, nhưng tốn chi phí khi lập chỉ mục, khó dự đoán kích thước, và lợi ích phụ thuộc mạnh vào cài đặt cụ thể (xem phần bằng chứng).</p>
+
+<table>
+<thead><tr><th>Chiến lược</th><th>Ưu điểm</th><th>Nhược điểm</th><th>Hợp với</th></tr></thead>
+<tbody>
+<tr><td>Cố định theo ký tự/token</td><td>Đơn giản, nhanh, kích thước đều</td><td>Cắt ngang câu/từ/bảng; overlap tạo gần trùng</td><td>Baseline, văn bản không cấu trúc</td></tr>
+<tr><td>Theo câu, gộp tới giới hạn</td><td>Không cắt giữa câu</td><td>Bỏ qua cấu trúc mục; cần tách câu tốt cho tiếng Việt</td><td>Văn bản tự do: email, ticket, bài viết</td></tr>
+<tr><td>Đệ quy theo cấu trúc</td><td>Ranh giới trùng ranh giới ý; trích dẫn theo mục</td><td>Phụ thuộc chất lượng trích xuất; kích thước không đều</td><td>Văn bản pháp luật, quy chế, tài liệu kỹ thuật, wiki</td></tr>
+<tr><td>Theo ngữ nghĩa</td><td>Thích ứng với nội dung không có cấu trúc rõ</td><td>Tốn embedding/LLM khi lập chỉ mục; khó dự đoán; khó tái hiện</td><td>Bản ghi hội thoại, văn bản dài ít heading — nên đo trước khi dùng</td></tr>
+</tbody>
+</table>
+
+<h2>Tự thử: ranh giới chunk thay đổi thế nào</h2>
+<p>Công cụ dưới đây dùng một đoạn chính sách đổi trả mẫu. Bạn có thể dán văn bản của mình vào. Hãy thử lần lượt:</p>
+<ol>
+<li>Chọn <em>Cố định theo ký tự</em>, kích thước 260, overlap 0. Đếm số chunk bị cắt giữa từ (chỉ số hiển thị bên trên). Đọc chunk thứ hai: nó có tự đứng được không?</li>
+<li>Giữ kích thước, chuyển sang <em>Theo câu</em>. Các chunk có còn bắt đầu giữa câu không? Kích thước trung bình thay đổi ra sao?</li>
+<li>Chuyển sang <em>Theo đoạn</em> và tăng kích thước lên 400–500. Để ý mục “Trường hợp ngoại lệ” có nằm chung với tiêu đề của nó không.</li>
+<li>Tăng overlap lên 100–150 và xem chỉ số “Tăng dung lượng do overlap”. Đó là phần embedding và lưu trữ bạn trả thêm.</li>
+<li>Kéo kích thước về 80–120: các câu như “Hàng giảm giá trên 50% không áp dụng đổi trả” có còn biết đang nói về chính sách nào không? Đây là lý do cần tiêu đề ngữ cảnh cho chunk nhỏ.</li>
+</ol>
+<div class="widget" data-widget="chunker"><p>Bật JavaScript để dùng công cụ tương tác.</p></div>
+
+<h2>Kích thước và overlap: bằng chứng nói gì</h2>
+<div class="callout nghien-cuu">
+<p><strong>Báo cáo kỹ thuật của Chroma (07/2024).</strong> Smith và Troynikov đánh giá chunking ở mức <em>token</em>: thay vì hỏi “chunk đúng có trong top-k không”, họ đo bao nhiêu token liên quan được lấy về (recall), bao nhiêu token lấy về là liên quan (precision) và chỉ số IoU phạt cả token thừa lẫn token lặp do overlap. Dữ liệu gồm 5 kho tiếng Anh (khoảng 328.000 token, 472 câu hỏi do GPT-4-Turbo sinh và được lọc), embedding chính là text-embedding-3-large, lấy 5 chunk[[cite:smith2024chroma]].</p>
+<p>Một số kết quả trong điều kiện đó: bộ cắt đệ quy 200 token không overlap đạt recall 88,1% và IoU 6,9, trong khi cấu hình 800 token overlap 400 đạt recall 85,4% và IoU 1,5. Cấu hình 800/400 — mặc định của OpenAI Assistants theo báo cáo — cho recall hơi dưới trung bình và thấp nhất ở các chỉ số còn lại. Hai phương pháp ngữ nghĩa do tác giả đề xuất cạnh tranh tốt (bộ dùng LLM đạt recall cao nhất 91,9%), còn cài đặt mặc định của một bộ semantic chunker phổ biến cho recall thấp hơn tất cả các cấu hình kể trên (83,6%). Tác giả kết luận lựa chọn chunking có thể làm recall chênh tới khoảng 9%, và giảm overlap làm tăng IoU.</p>
+</div>
+<div class="callout nghien-cuu">
+<p><strong>Blog đánh giá của LlamaIndex (10/2023).</strong> Thử các kích thước 128, 256, 512, 1024, 2048 trên 20 trang đầu báo cáo thường niên 10-K của Uber, câu hỏi tự sinh, GPT-3.5-turbo trả lời và GPT-4 chấm faithfulness và relevancy. Trong thiết lập đó, 1024 cho kết quả tốt nhất ở cả hai chỉ số, thời gian phản hồi tăng nhẹ theo kích thước[[cite:theja2023chunksize]].</p>
+</div>
+<p>Hai nguồn trên có vẻ mâu thuẫn — một bên ưa chunk nhỏ, một bên ưa 1024 — nhưng thực ra đo hai thứ khác nhau. Chroma đo <em>hiệu quả truy hồi ở mức token</em> (chunk nhỏ ít token thừa nên precision và IoU cao); LlamaIndex đo <em>chất lượng câu trả lời</em> do một LLM chấm (chunk lớn mang nhiều ngữ cảnh hơn cho mô hình sinh). Dữ liệu, mô hình, số chunk lấy về đều khác. Bài học không phải là “200” hay “1024”, mà là: <strong>kích thước tối ưu phụ thuộc vào thứ bạn đo, dữ liệu và câu hỏi</strong>. Các nghiên cứu khác chọn kích thước như một tham số cố định chứ không tối ưu nó — ví dụ Li và cộng sự dùng chunk 300 từ trong so sánh RAG với ngữ cảnh dài[[cite:li2024selfroute]] — nên đừng đọc con số đó như một khuyến nghị.</p>
+<div class="callout kinh-nghiem">
+<p><strong>Điểm khởi đầu, không phải đáp án.</strong> Thực hành phổ biến là bắt đầu trong khoảng 200–800 token mỗi chunk, overlap 0–15%, cắt theo cấu trúc, rồi điều chỉnh bằng đánh giá. Câu hỏi tra cứu sự kiện ngắn (“phí thường niên thẻ Gold?”) thường hưởng lợi từ chunk nhỏ; câu hỏi cần giải thích, so sánh, quy trình nhiều bước thường cần chunk lớn hơn hoặc cơ chế mở rộng sang đoạn cha. Nếu kho có cả hai loại, cân nhắc parent-child thay vì cố tìm một kích thước chung. Đây là quy tắc kinh nghiệm, phải đo lại trên dữ liệu của bạn.</p>
+</div>
+
+<h2>Những loại nội dung cần xử lý riêng</h2>
+<h3>Bảng</h3>
+<p>Đừng để bộ chunking cắt giữa bảng. Bảng nhỏ nên nằm trọn trong một chunk kèm tiêu đề và chú thích; bảng lớn nên cắt theo nhóm hàng và <em>lặp lại hàng tiêu đề cột</em> ở mỗi phần, nếu không chunk thứ hai chỉ còn các con số không tên. Với bảng biểu phí, lãi suất, cân nhắc biểu diễn mỗi hàng thành một câu đầy đủ (xem [[link:du-lieu/metadata-va-bieu-dien]]), hoặc truy vấn trực tiếp như dữ liệu có cấu trúc.</p>
+<h3>Mã nguồn</h3>
+<p>Cắt theo đơn vị cú pháp — hàm, lớp, khối — thay vì theo dòng. Một hàm bị cắt đôi mất cả chữ ký lẫn thân. Giữ đường dẫn tệp và tên lớp chứa hàm như ngữ cảnh.</p>
+<h3>Hỏi đáp (FAQ) và danh sách</h3>
+<p>Mỗi cặp hỏi–đáp là một chunk tự nhiên; đừng gộp năm câu hỏi khác nhau chỉ vì tổng độ dài còn dưới giới hạn. Danh sách điều kiện (“khách hàng được đổi trả khi: a)… b)… c)…”) phải đi cùng câu dẫn của nó.</p>
+<h3>Văn bản pháp luật, hợp đồng</h3>
+<p>Cắt theo Điều/Khoản, giữ số hiệu văn bản và tên Điều trong mỗi chunk. Lưu ý các tham chiếu chéo (“trừ trường hợp quy định tại Khoản 3 Điều này”): chunk chứa Khoản 1 không tự giải thích được nếu thiếu Khoản 3. Một số hệ thống giải quyết bằng cách truy hồi thêm các đoạn được tham chiếu; xem [[link:nang-cao/tinh-huong-ung-dung]].</p>
+
+<h2>Tách đơn vị tìm kiếm khỏi đơn vị trả về</h2>
+<p>Mâu thuẫn “nhỏ để tìm chính xác, lớn để đủ ngữ cảnh” có một lối thoát: không bắt buộc đoạn được <em>so khớp</em> phải là đoạn được <em>đưa vào prompt</em>.</p>
+<figure class="diagram">
+<svg viewBox="0 0 760 260" width="760" role="img" aria-labelledby="ck-t ck-d">
+<title id="ck-t">Truy hồi parent-child (small-to-big)</title>
+<desc id="ck-d">Một Điều trong quy chế là chunk cha. Nó được chia thành ba chunk con theo Khoản, mỗi chunk con có vector riêng trong chỉ mục. Câu hỏi khớp với chunk con thứ hai; hệ thống trả về chunk cha chứa nó để đưa vào prompt.</desc>
+<defs><marker id="ck-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="arrowhead"/></marker></defs>
+<rect x="20" y="20" width="440" height="60" rx="8" class="box-w"/>
+<text x="240" y="45" font-size="14" text-anchor="middle" font-weight="700">Chunk cha: Điều 5. Phụ cấp lưu trú</text>
+<text x="240" y="65" font-size="11.5" text-anchor="middle" class="muted">đưa vào prompt (khoảng 1.000 token)</text>
+<rect x="20" y="130" width="136" height="56" rx="8" class="box"/><text x="88" y="154" font-size="13" text-anchor="middle">Con 1: Khoản 1</text><text x="88" y="172" font-size="11.5" text-anchor="middle" class="muted">vector riêng</text>
+<rect x="172" y="130" width="136" height="56" rx="8" class="box-a"/><text x="240" y="154" font-size="13" text-anchor="middle" font-weight="700">Con 2: Khoản 2</text><text x="240" y="172" font-size="11.5" text-anchor="middle" class="muted">khớp câu hỏi</text>
+<rect x="324" y="130" width="136" height="56" rx="8" class="box"/><text x="392" y="154" font-size="13" text-anchor="middle">Con 3: Khoản 3</text><text x="392" y="172" font-size="11.5" text-anchor="middle" class="muted">vector riêng</text>
+<path d="M88 128V82M392 128V82" class="ln-d"/>
+<path d="M240 128V84" class="ln" marker-end="url(#ck-ah)"/>
+<rect x="540" y="130" width="200" height="56" rx="8" class="box-b"/><text x="640" y="154" font-size="13" text-anchor="middle">Câu hỏi</text><text x="640" y="172" font-size="11.5" text-anchor="middle" class="muted">“phụ cấp đi Hà Nội?”</text>
+<path d="M640 188V212H240V190" class="ln" marker-end="url(#ck-ah)"/>
+<text x="440" y="206" font-size="11.5" text-anchor="middle" class="muted">so khớp</text>
+<text x="252" y="108" font-size="11.5" class="muted">trả về cha</text>
+<text x="380" y="246" font-size="12" text-anchor="middle" class="muted">Tìm bằng đơn vị nhỏ (chính xác) · trả về đơn vị lớn (đủ ngữ cảnh) · trích dẫn có thể trỏ tới chính Khoản 2</text>
+</svg>
+<figcaption>Parent-child: chỉ mục chứa vector của chunk con, mỗi con trỏ tới chunk cha. Kích thước trong hình là ví dụ.</figcaption>
+</figure>
+<ul>
+<li><strong>Parent-child / small-to-big:</strong> lập chỉ mục chunk con nhỏ, khi trúng thì trả về chunk cha (mục, Điều, hoặc cả trang). Nếu nhiều con của cùng một cha trúng, chỉ đưa cha một lần.</li>
+<li><strong>Cửa sổ câu (sentence window):</strong> lập chỉ mục từng câu, khi trúng thì lấy thêm k câu trước và sau.</li>
+<li><strong>Đa biểu diễn:</strong> lập chỉ mục tóm tắt hoặc câu hỏi giả định, trả về văn bản gốc — xem [[link:du-lieu/metadata-va-bieu-dien]].</li>
+</ul>
+<p>Đơn vị nhỏ nhất có thể đi tới mức <em>proposition</em> — mệnh đề nguyên tử chứa một dữ kiện. Trên Wikipedia tiếng Anh, Chen và cộng sự báo cáo lập chỉ mục theo proposition cho recall cao hơn theo passage, rõ nhất với bộ truy hồi không giám sát[[cite:chen2023densex]]; chi tiết và điều kiện ở bài metadata và biểu diễn.</p>
+
+<h2>Late chunking: cắt sau khi embedding</h2>
+<p>Mọi chiến lược trên đều “cắt trước, embed sau”: mỗi chunk được mã hóa độc lập, không biết các chunk khác nói gì. Câu “Mức phụ cấp là 200.000 đồng/ngày” được embed mà không biết nó thuộc Điều 5 về phụ cấp lưu trú.</p>
+<div class="callout nghien-cuu">
+<p>Günther và cộng sự (Jina AI, 2024) đề xuất <strong>late chunking</strong>: đưa cả tài liệu (hoặc phần dài nhất mô hình nhận được) qua một mô hình embedding ngữ cảnh dài, lấy vector của từng <em>token</em> ở đầu ra, rồi mới chia các token đó theo ranh giới chunk và lấy trung bình (mean pooling) cho mỗi chunk. Vì mỗi token đã được mã hóa khi “nhìn thấy” cả tài liệu, vector chunk mang ngữ cảnh xung quanh. Tác giả báo cáo kết quả tốt hơn cách cắt truyền thống trên nhiều tác vụ truy hồi, phương pháp áp dụng được cho nhiều mô hình embedding ngữ cảnh dài mà không cần huấn luyện thêm, và đề xuất thêm một cách fine-tune để tăng hiệu quả[[cite:gunther2024late]].</p>
+</div>
+<p><strong>Điều kiện áp dụng:</strong> cần một mô hình embedding ngữ cảnh dài và cần truy cập vector ở mức token — điều mà nhiều API embedding thương mại chỉ trả về một vector cho mỗi đầu vào không cung cấp, trừ khi nhà cung cấp hỗ trợ sẵn. Tài liệu dài hơn cửa sổ của mô hình vẫn phải chia thành các khối lớn. Một hướng khác giải quyết cùng vấn đề là sinh câu ngữ cảnh cho mỗi chunk bằng LLM (contextual retrieval) — tốn chi phí LLM khi lập chỉ mục nhưng dùng được với bất kỳ mô hình embedding nào; so sánh ở [[link:du-lieu/metadata-va-bieu-dien]].</p>
+
+<h2>Đánh giá lựa chọn chunking</h2>
+<p>Vì không có cấu hình đúng phổ quát, cách duy nhất đáng tin là so sánh trên dữ liệu của bạn.</p>
+<ol class="steps">
+<li><strong>Chuẩn bị bộ câu hỏi đại diện</strong> (50–200 câu), trộn các loại: tra cứu sự kiện, giải thích quy trình, so sánh, câu hỏi về bảng. Lấy từ log thật nếu có.</li>
+<li><strong>Gắn nhãn theo vị trí văn bản</strong>, không theo mã chunk: “đáp án nằm ở tài liệu X, từ ký tự 1.520 đến 1.890” hoặc “tài liệu X, Điều 5 Khoản 2”. Khi đổi chunking, mã chunk thay đổi nhưng nhãn vẫn dùng được: một chunk được tính là đúng nếu nó phủ (một phần đủ lớn) đoạn đáp án.</li>
+<li><strong>Cố định mọi thứ khác</strong>: cùng mô hình embedding, cùng chỉ mục, cùng k. Chỉ đổi chunking.</li>
+<li><strong>Đo truy hồi</strong>: Recall@k theo tài liệu và theo đoạn đáp án; nếu muốn tính cả hiệu quả sử dụng ngữ cảnh, đo thêm precision/IoU mức token như báo cáo của Chroma[[cite:smith2024chroma]]. Lưu ý so sánh công bằng: 5 chunk 200 token và 5 chunk 1.000 token chiếm ngân sách ngữ cảnh rất khác nhau — cân nhắc so ở cùng <em>tổng số token</em> đưa vào prompt.</li>
+<li><strong>Đo đầu-cuối</strong> trên một tập con: độ đúng và độ trung thực của câu trả lời (xem [[link:danh-gia/danh-gia-generation]]).</li>
+<li><strong>Đọc lỗi theo loại câu hỏi</strong>: cấu hình A có thể thắng ở câu hỏi sự kiện nhưng thua ở câu hỏi quy trình. Đó là tín hiệu cho parent-child hoặc định tuyến.</li>
+<li><strong>Tính chi phí</strong>: số chunk, dung lượng chỉ mục, chi phí embedding, chi phí LLM nếu dùng semantic/contextual chunking.</li>
+</ol>
+<p>Các chỉ số Recall@k, MRR, nDCG được giải thích chi tiết, kèm công cụ tính, ở [[link:danh-gia/do-luong-retrieval]].</p>
+
+<div class="callout canh-bao">
+<p><strong>Lỗi thường gặp</strong></p>
+<ul>
+<li><em>Dùng mặc định của thư viện mà không biết nó là gì</em> — kể cả đơn vị (ký tự hay token) và overlap.</li>
+<li><em>Cắt văn bản đã bị làm phẳng</em> — mất heading thì chunking “theo cấu trúc” không còn cấu trúc để theo.</li>
+<li><em>Overlap lớn để “cho chắc”</em> — các chunk gần trùng chiếm chỗ của nhau trong top-k, dung lượng tăng, và theo báo cáo của Chroma, overlap làm giảm hiệu quả token[[cite:smith2024chroma]].</li>
+<li><em>Tách tiêu đề khỏi nội dung</em> — một chunk chỉ chứa “Điều 7. Trường hợp ngoại lệ”, chunk sau chứa nội dung không biết mình là ngoại lệ của gì.</li>
+<li><em>Gắn nhãn đánh giá theo mã chunk</em> — mỗi lần đổi chunking lại phải gắn nhãn lại, nên không ai dám đổi.</li>
+</ul>
+</div>
+
+<div class="callout nhan-dinh">
+<p>Chúng tôi cho rằng với phần lớn tài liệu doanh nghiệp và pháp lý tiếng Việt — vốn có cấu trúc chương/điều/mục rõ ràng — thời gian đầu tư vào trích xuất giữ cấu trúc và chunking theo cấu trúc mang lại nhiều hơn so với thử các bộ semantic chunker. Semantic chunking đáng thử khi văn bản thật sự thiếu cấu trúc (bản ghi cuộc gọi, chat), và chỉ nên giữ lại nếu đánh giá cho thấy lợi ích rõ so với baseline đơn giản.</p>
+</div>
+
+<h2>Tự kiểm tra</h2>
+<div class="callout kiem-chung">
+<ol>
+<li>Thư viện chunking bạn đang dùng đo kích thước bằng ký tự, âm tiết hay token? Của tokenizer nào?</li>
+<li>Lấy ngẫu nhiên 10 chunk trong chỉ mục. Mỗi chunk có tự đứng được không — một người đọc không có tài liệu gốc có biết nó nói về văn bản nào, mục nào không?</li>
+<li>Có bảng nào bị cắt mà phần sau không còn hàng tiêu đề cột không?</li>
+<li>Trong công cụ ở trên, với cùng văn bản, thay đổi nào làm số chunk cắt giữa từ về 0? Thay đổi đó có làm tăng kích thước chênh lệch giữa các chunk không?</li>
+<li>Nhãn trong bộ đánh giá của bạn còn dùng được không nếu ngày mai bạn đổi kích thước chunk?</li>
+</ol>
+</div>
+
+<h2>Đọc tiếp</h2>
+<ul>
+<li>Bài tiếp theo: [[link:du-lieu/metadata-va-bieu-dien]] — bù ngữ cảnh cho chunk, proposition, tóm tắt phân cấp, bảng và hình ảnh.</li>
+<li>Chunk được biến thành vector thế nào: [[link:truy-hoi/embedding]].</li>
+<li>Đưa bao nhiêu chunk vào prompt, theo thứ tự nào: [[link:sinh/xay-dung-context]].</li>
+<li>Đọc gốc: báo cáo chunking của Chroma[[cite:smith2024chroma]] cho phương pháp đánh giá mức token; Günther et al.[[cite:gunther2024late]] cho late chunking.</li>
+</ul>

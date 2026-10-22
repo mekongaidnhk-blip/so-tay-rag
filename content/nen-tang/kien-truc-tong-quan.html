@@ -1,0 +1,218 @@
+---
+{
+  "title": "Kiến trúc tổng quan một hệ thống RAG",
+  "navTitle": "Kiến trúc tổng quan",
+  "description": "Bản đồ các thành phần của một hệ thống RAG — từ thu thập dữ liệu, chunking, embedding, chỉ mục tới truy hồi, rerank, ghép ngữ cảnh, sinh, trích dẫn, đánh giá, giám sát và phân quyền — cùng nơi mỗi quyết định thiết kế được đưa ra.",
+  "lead": "Khi một câu trả lời RAG sai, câu hỏi đầu tiên là “sai ở đâu?”. Không trả lời được nếu không có bản đồ hệ thống trong đầu. Bài này dựng bản đồ đó: các thành phần, dữ liệu chảy qua chúng thế nào, quyết định nào nằm ở thành phần nào và đổi lại tốn bao nhiêu.",
+  "level": "Người mới",
+  "reviewed": "2026-10-22",
+  "kinds": ["nen-tang", "nghien-cuu", "kinh-nghiem", "nhan-dinh"]
+}
+---
+<div class="callout tom-tat">
+<ul>
+<li>Một hệ thống RAG có hai <strong>mặt phẳng</strong>: mặt phẳng dữ liệu (offline — thu thập, làm sạch, chunking, embedding, lập chỉ mục) và mặt phẳng truy vấn (online — xử lý truy vấn, truy hồi, rerank, ghép ngữ cảnh, sinh, trích dẫn). Ba thành phần <strong>xuyên suốt</strong> là phân quyền, đánh giá và giám sát.</li>
+<li>Khảo sát của Gao và cộng sự chia các hệ thống thành Naive, Advanced và Modular RAG. Ba nhãn này mô tả mức độ phân rã pipeline, không phải bậc thang bắt buộc phải leo.</li>
+<li>Quyết định ở mặt phẳng dữ liệu (chunking, mô hình embedding, metadata) đắt để đổi vì phải lập chỉ mục lại; quyết định ở mặt phẳng truy vấn (reranker, prompt, số đoạn) rẻ hơn. Hãy dồn thời gian suy nghĩ vào loại thứ nhất.</li>
+<li>Phân quyền phải được <em>ghi nhận khi thu thập</em> và <em>áp dụng khi truy hồi</em>; không thể vá ở bước sinh.</li>
+</ul>
+</div>
+
+<h2>Vì sao cần nhìn toàn cảnh trước</h2>
+<p>Sơ đồ hai pha trong [[link:nen-tang/rag-la-gi]] đủ để hiểu ý tưởng. Nhưng khi bắt tay xây, bạn sẽ gặp những câu hỏi mà sơ đồ đó không trả lời: quyền truy cập của tài liệu được lưu ở đâu? Ai quyết định một chính sách cũ đã hết hiệu lực? Đổi mô hình embedding thì phải làm lại những gì? Một câu trả lời sai thì xem log nào trước?</p>
+<p>Nghiên cứu của Barnett và cộng sự tổng kết từ ba hệ thống RAG thực tế cho thấy các điểm lỗi trải khắp pipeline — nội dung không có trong kho, tài liệu đúng không lọt top-k, bị loại khi ghép ngữ cảnh, mô hình không trích được câu trả lời, sai định dạng, câu trả lời không đầy đủ — và nhiều lỗi chỉ lộ ra khi vận hành[[cite:barnett2024]]. Mỗi điểm lỗi gắn với một thành phần cụ thể. Có bản đồ thì chẩn đoán trở thành việc đi từng trạm; không có bản đồ thì chỉ còn cách đổi prompt và hy vọng.</p>
+
+<h2>Bản đồ thành phần</h2>
+<figure class="diagram">
+<svg viewBox="0 0 760 500" width="760" role="img" aria-labelledby="kt-t kt-d">
+<title id="kt-t">Kiến trúc tổng quan một hệ thống RAG</title>
+<desc id="kt-d">Mặt phẳng dữ liệu: nguồn dữ liệu qua bộ kết nối, trích xuất và làm sạch, chunking kèm metadata, embedding, rồi lưu vào chỉ mục gồm vector, từ khóa và metadata. Mặt phẳng truy vấn: người dùng đã xác thực gửi câu hỏi, qua xử lý truy vấn, truy hồi lai có lọc quyền trên chỉ mục, rerank, ghép ngữ cảnh, LLM sinh, kiểm tra trích dẫn, rồi trả câu trả lời kèm nguồn cho người dùng. Các thành phần xuyên suốt: phân quyền, đánh giá, giám sát; log và phản hồi quay về cải tiến dữ liệu và truy hồi.</desc>
+<defs><marker id="kt-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="arrowhead"/></marker></defs>
+<text x="20" y="26" font-size="13" font-weight="700" class="muted">MẶT PHẲNG DỮ LIỆU · offline, chạy khi nguồn thay đổi</text>
+<rect x="20" y="40" width="120" height="56" rx="8" class="box"/><text x="80" y="64" font-size="13.5" text-anchor="middle">Nguồn</text><text x="80" y="82" font-size="11.5" text-anchor="middle" class="muted">connector, đồng bộ</text>
+<rect x="170" y="40" width="120" height="56" rx="8" class="box"/><text x="230" y="64" font-size="13.5" text-anchor="middle">Trích xuất</text><text x="230" y="82" font-size="11.5" text-anchor="middle" class="muted">làm sạch, khử trùng</text>
+<rect x="320" y="40" width="120" height="56" rx="8" class="box"/><text x="380" y="64" font-size="13.5" text-anchor="middle">Chunking</text><text x="380" y="82" font-size="11.5" text-anchor="middle" class="muted">+ metadata, ACL</text>
+<rect x="470" y="40" width="120" height="56" rx="8" class="box"/><text x="530" y="64" font-size="13.5" text-anchor="middle">Embedding</text><text x="530" y="82" font-size="11.5" text-anchor="middle" class="muted">(+ biểu diễn phụ)</text>
+<rect x="620" y="40" width="120" height="56" rx="8" class="box-a"/><text x="680" y="64" font-size="13.5" text-anchor="middle" font-weight="700">Chỉ mục</text><text x="680" y="82" font-size="11.5" text-anchor="middle" class="muted">vector + BM25</text>
+<path d="M140 68h28M290 68h28M440 68h28M590 68h28" class="ln" marker-end="url(#kt-ah)"/>
+<text x="20" y="160" font-size="13" font-weight="700" class="muted">MẶT PHẲNG TRUY VẤN · online, mỗi câu hỏi</text>
+<rect x="20" y="176" width="120" height="56" rx="8" class="box-b"/><text x="80" y="200" font-size="13.5" text-anchor="middle">Người dùng</text><text x="80" y="218" font-size="11.5" text-anchor="middle" class="muted">đã xác thực</text>
+<rect x="170" y="176" width="120" height="56" rx="8" class="box"/><text x="230" y="200" font-size="13.5" text-anchor="middle">Xử lý truy vấn</text><text x="230" y="218" font-size="11.5" text-anchor="middle" class="muted">viết lại câu hỏi</text>
+<rect x="320" y="176" width="120" height="56" rx="8" class="box-a"/><text x="380" y="200" font-size="13.5" text-anchor="middle" font-weight="700">Truy hồi</text><text x="380" y="218" font-size="11.5" text-anchor="middle" class="muted">lai + lọc quyền</text>
+<rect x="470" y="176" width="120" height="56" rx="8" class="box"/><text x="530" y="200" font-size="13.5" text-anchor="middle">Rerank</text><text x="530" y="218" font-size="11.5" text-anchor="middle" class="muted">top-50 → top-5</text>
+<rect x="620" y="176" width="120" height="56" rx="8" class="box"/><text x="680" y="200" font-size="13.5" text-anchor="middle">Ghép ngữ cảnh</text><text x="680" y="218" font-size="11.5" text-anchor="middle" class="muted">thứ tự, ngân sách</text>
+<path d="M140 204h28M290 204h28M440 204h28M590 204h28" class="ln" marker-end="url(#kt-ah)"/>
+<path d="M680 96 V130 H380 V174" class="ln-d" marker-end="url(#kt-ah)"/>
+<text x="560" y="124" font-size="11.5" text-anchor="middle" class="muted">tìm trên chỉ mục</text>
+<rect x="620" y="268" width="120" height="56" rx="8" class="box-w"/><text x="680" y="292" font-size="13.5" text-anchor="middle" font-weight="700">LLM sinh</text><text x="680" y="310" font-size="11.5" text-anchor="middle" class="muted">theo hướng dẫn</text>
+<rect x="470" y="268" width="120" height="56" rx="8" class="box"/><text x="530" y="292" font-size="13.5" text-anchor="middle">Trích dẫn</text><text x="530" y="310" font-size="11.5" text-anchor="middle" class="muted">kiểm tra, guardrail</text>
+<rect x="320" y="268" width="120" height="56" rx="8" class="box-b"/><text x="380" y="292" font-size="13.5" text-anchor="middle">Câu trả lời</text><text x="380" y="310" font-size="11.5" text-anchor="middle" class="muted">+ nguồn</text>
+<path d="M680 232v34" class="ln" marker-end="url(#kt-ah)"/>
+<path d="M620 296h-28M470 296h-28" class="ln" marker-end="url(#kt-ah)"/>
+<path d="M320 296 H80 V234" class="ln" marker-end="url(#kt-ah)"/>
+<text x="200" y="288" font-size="11.5" text-anchor="middle" class="muted">trả về người hỏi</text>
+<text x="20" y="364" font-size="13" font-weight="700" class="muted">XUYÊN SUỐT</text>
+<rect x="20" y="376" width="232" height="58" rx="8" class="box-v"/><text x="136" y="400" font-size="13.5" text-anchor="middle">Phân quyền</text><text x="136" y="420" font-size="11.5" text-anchor="middle" class="muted">ghi khi thu thập, áp khi truy hồi</text>
+<rect x="264" y="376" width="232" height="58" rx="8" class="box-v"/><text x="380" y="400" font-size="13.5" text-anchor="middle">Đánh giá</text><text x="380" y="420" font-size="11.5" text-anchor="middle" class="muted">bộ kiểm thử retrieval + generation</text>
+<rect x="508" y="376" width="232" height="58" rx="8" class="box-v"/><text x="624" y="400" font-size="13.5" text-anchor="middle">Giám sát</text><text x="624" y="420" font-size="11.5" text-anchor="middle" class="muted">log, độ trễ, chi phí, phản hồi</text>
+<text x="380" y="466" font-size="12" text-anchor="middle" class="muted">Vòng cải tiến: log và phản hồi → câu hỏi kiểm thử mới → sửa dữ liệu, truy hồi hoặc prompt → đo lại</text>
+</svg>
+<figcaption>Bản đồ thành phần. Ô màu nhấn là nơi chất lượng thường được quyết định (chỉ mục, truy hồi). Con số “top-50 → top-5” chỉ là ví dụ cấu hình.</figcaption>
+</figure>
+
+<h2>Mặt phẳng dữ liệu (offline)</h2>
+<p>Mặt phẳng dữ liệu biến tài liệu thô thành một chỉ mục có thể tìm kiếm. Nó chạy khi dữ liệu thay đổi — theo lịch, theo sự kiện, hoặc khi bạn đổi cấu hình — chứ không chạy theo từng câu hỏi. Vì vậy nó được phép chậm và tốn kém hơn, nhưng mọi sai sót ở đây sẽ lặp lại ở <em>mọi</em> truy vấn sau đó.</p>
+
+<h3>Nguồn và bộ kết nối (connector)</h3>
+<p>Kéo dữ liệu từ nơi nó sống: thư mục chia sẻ, SharePoint, Confluence, Google Drive, hệ thống quản lý văn bản, cơ sở dữ liệu, website. Quyết định chính: đồng bộ toàn bộ hay tăng dần, phát hiện xóa thế nào, và lấy kèm những metadata nào (người sở hữu, nhóm được xem, ngày sửa). Bộ kết nối là nơi duy nhất nhìn thấy quyền truy cập gốc — bỏ lỡ ở đây thì không bù được về sau.</p>
+
+<h3>Trích xuất và làm sạch</h3>
+<p>Biến PDF, Word, HTML, ảnh quét thành văn bản có cấu trúc (tiêu đề, đoạn, bảng), loại header/footer lặp, chuẩn hóa Unicode (đặc biệt quan trọng với tiếng Việt), khử trùng lặp, gắn phiên bản. Theo kinh nghiệm, đây thường là khâu tốn công nhất mà lại ít được chú ý nhất. Chi tiết: [[link:du-lieu/thu-thap-lam-sach]].</p>
+
+<h3>Chunking và metadata</h3>
+<p>Cắt tài liệu thành các đơn vị truy hồi và gắn cho mỗi đơn vị “lý lịch”: nguồn, đường dẫn mục, ngày hiệu lực, quyền truy cập. Quyết định ở đây — kích thước, ranh giới, có overlap không, đơn vị tìm kiếm có khác đơn vị trả về không — ảnh hưởng trực tiếp tới recall và độ chính xác của trích dẫn. Xem [[link:du-lieu/chunking]] và [[link:du-lieu/metadata-va-bieu-dien]].</p>
+
+<h3>Embedding và biểu diễn</h3>
+<p>Chuyển mỗi chunk (và có thể cả các biểu diễn phụ như tóm tắt, câu hỏi giả định) thành vector. Quyết định: chọn mô hình nào, có hỗ trợ tiếng Việt tốt không, số chiều bao nhiêu, chạy ở đâu. Đổi mô hình embedding đồng nghĩa với embedding lại toàn bộ kho. Xem [[link:truy-hoi/embedding]].</p>
+
+<h3>Chỉ mục</h3>
+<p>Lưu vector trong một cấu trúc tìm kiếm lân cận gần đúng (HNSW, IVF…), thường kèm một chỉ mục từ khóa (BM25) và kho metadata để lọc. Quyết định: dùng vector database riêng hay tiện ích trong cơ sở dữ liệu sẵn có, đánh đổi bộ nhớ – tốc độ – độ chính xác, cách cập nhật không gián đoạn. Xem [[link:truy-hoi/vector-index]].</p>
+
+<h2>Mặt phẳng truy vấn (online)</h2>
+<p>Mặt phẳng truy vấn chạy ở mỗi câu hỏi, nên bị ràng buộc bởi ngân sách độ trễ và chi phí. Nhưng mọi thứ ở đây có thể thay đổi mà không đụng tới chỉ mục, nên là nơi lý tưởng để thử nghiệm nhanh.</p>
+
+<h3>Xử lý truy vấn</h3>
+<p>Câu hỏi của người dùng hiếm khi là truy vấn tìm kiếm tốt. Khâu này có thể viết lại câu hỏi theo ngữ cảnh hội thoại (“còn thẻ Gold thì sao?” → “phí thường niên thẻ tín dụng Gold”), tách câu hỏi phức tạp, trích bộ lọc (“chính sách <em>năm 2025</em>”), hoặc định tuyến sang nhánh khác như SQL (xem [[link:nen-tang/khi-nao-dung-rag]]). Chi tiết: [[link:tim-kiem/xu-ly-truy-van]].</p>
+
+<h3>Truy hồi</h3>
+<p>Tìm các ứng viên liên quan nhất, thường kết hợp tìm kiếm vector với BM25 (hybrid search) và <strong>luôn</strong> áp bộ lọc quyền truy cập của người hỏi. Thường lấy dư (vài chục ứng viên) để bước sau chọn lại. Xem [[link:tim-kiem/hybrid-search]].</p>
+
+<h3>Rerank</h3>
+<p>Một mô hình mạnh hơn nhưng chậm hơn (thường là cross-encoder) chấm lại từng cặp (câu hỏi, ứng viên) và giữ vài đoạn tốt nhất. Theo kinh nghiệm phổ biến, đây thường là một trong những cải tiến cho hiệu quả cao so với công sức bỏ ra, vì không cần lập chỉ mục lại — nhưng mức cải thiện cụ thể phải đo trên dữ liệu của bạn. Xem [[link:tim-kiem/reranking]].</p>
+
+<h3>Ghép ngữ cảnh</h3>
+<p>Quyết định bao nhiêu đoạn, theo thứ tự nào, có gộp các đoạn liền kề không, có mở rộng ra đoạn cha không, định dạng mã nguồn để trích dẫn ra sao, cộng hướng dẫn hệ thống. Xem [[link:sinh/xay-dung-context]].</p>
+
+<h3>Sinh và trích dẫn</h3>
+<p>LLM tổng hợp câu trả lời, gắn mỗi nhận định với đoạn nguồn, và từ chối khi tài liệu không đủ. Một lớp hậu kiểm có thể xác minh mỗi trích dẫn có thật sự ủng hộ nhận định, lọc nội dung nhạy cảm, hoặc chặn câu trả lời không có căn cứ. Xem [[link:sinh/trich-dan-grounding]].</p>
+
+<h2>Ba thành phần xuyên suốt</h2>
+<p><strong>Phân quyền.</strong> Một chunk mang theo danh sách nhóm được xem từ lúc thu thập; khi truy hồi, bộ lọc chỉ cho phép các chunk mà người hỏi có quyền. Cách sai phổ biến là để LLM “tự biết không nói ra” — mô hình đã đọc được đoạn văn thì không có gì bảo đảm nó không tiết lộ, kể cả khi bị prompt injection gián tiếp[[cite:greshake2023]]. Danh mục OWASP cho ứng dụng LLM bản 2025 có hẳn một mục về điểm yếu của vector và embedding, trong đó có rò rỉ dữ liệu giữa các nhóm người dùng[[cite:owasp2025]]. Xem [[link:van-hanh/bao-mat]].</p>
+<p><strong>Đánh giá.</strong> Một bộ câu hỏi kiểm thử có nhãn, chấm riêng truy hồi (tài liệu đúng có trong top-k không) và sinh (câu trả lời có trung thực với tài liệu không). Các framework như RAGAS đề xuất chỉ số như faithfulness, answer relevance, context relevance có thể tính không cần đáp án tham chiếu[[cite:es2023ragas]] — nhưng vẫn cần một phần nhãn do người kiểm tra. Xem [[link:danh-gia/do-luong-retrieval]] và [[link:danh-gia/danh-gia-generation]].</p>
+<p><strong>Giám sát.</strong> Ghi log đủ để tái hiện mọi câu trả lời: câu hỏi gốc, truy vấn đã viết lại, danh sách ứng viên và điểm, đoạn được đưa vào prompt, phiên bản chỉ mục và prompt, câu trả lời, phản hồi người dùng. Thiếu log ứng viên truy hồi là lý do phổ biến khiến không chẩn đoán được lỗi. Xem [[link:danh-gia/chan-doan-loi]] và [[link:van-hanh/chi-phi-do-tre]].</p>
+
+<h2>Theo dấu một câu hỏi qua hệ thống</h2>
+<p>Ví dụ ở một ngân hàng: một giao dịch viên chi nhánh hỏi trợ lý nội bộ. Các tên tài liệu, mã mục và con số dưới đây là <em>minh họa</em>.</p>
+<table>
+<thead><tr><th>Thành phần</th><th>Đầu vào → đầu ra</th><th>Cần ghi log gì</th></tr></thead>
+<tbody>
+<tr><td>Người dùng</td><td>“Phí rút tiền mặt bằng thẻ tín dụng Platinum là bao nhiêu?”; danh tính: nhóm <code>chi-nhanh</code></td><td>Mã phiên, nhóm quyền</td></tr>
+<tr><td>Xử lý truy vấn</td><td>Nhận diện đây là câu hỏi về biểu phí → thêm bộ lọc <code>doc_type = bieu-phi</code>, <code>hieu_luc</code> bao gồm hôm nay</td><td>Truy vấn đã viết lại, bộ lọc trích được</td></tr>
+<tr><td>Truy hồi</td><td>BM25 bắt cụm “rút tiền mặt”, “Platinum”; vector bắt các diễn đạt như “ứng tiền mặt”; hợp nhất được 40 ứng viên, đã lọc theo quyền <code>chi-nhanh</code></td><td>Danh sách ứng viên, điểm từng nhánh</td></tr>
+<tr><td>Rerank</td><td>Giữ 5 đoạn; đứng đầu là “Biểu phí thẻ tín dụng 2026, Mục 3.2 — Phí ứng/rút tiền mặt”</td><td>Thứ hạng trước/sau rerank</td></tr>
+<tr><td>Ghép ngữ cảnh</td><td>5 đoạn kèm tiêu đề tài liệu, mã mục, ngày hiệu lực; hướng dẫn “chỉ trả lời từ tài liệu, ghi rõ mục”</td><td>Prompt cuối cùng, số token</td></tr>
+<tr><td>Sinh + trích dẫn</td><td>“Theo Biểu phí thẻ tín dụng 2026, Mục 3.2, phí rút tiền mặt thẻ Platinum là …% số tiền rút, tối thiểu … đồng [1].”</td><td>Câu trả lời, trích dẫn, kết quả hậu kiểm</td></tr>
+<tr><td>Giám sát</td><td>Giao dịch viên bấm “không hữu ích” vì biểu phí đã đổi từ tháng trước</td><td>Phản hồi gắn với mã phiên → trở thành câu hỏi kiểm thử</td></tr>
+</tbody>
+</table>
+<p>Ở dòng cuối, lỗi không nằm ở LLM: tài liệu mới chưa được đồng bộ, hoặc tài liệu cũ chưa bị đánh dấu hết hiệu lực. Nhờ log, ta biết ngay cần sửa ở mặt phẳng dữ liệu chứ không phải viết lại prompt.</p>
+
+<h2>Naive, Advanced và Modular RAG</h2>
+<p>Khảo sát của Gao và cộng sự phân các hệ thống RAG thành ba “mô thức” (paradigm) theo mức độ tinh chỉnh pipeline[[cite:gao2023survey]]. Đây là cách phân loại hữu ích để định vị tài liệu bạn đọc, không phải tiêu chuẩn kỹ thuật.</p>
+<table>
+<thead><tr><th></th><th>Naive RAG</th><th>Advanced RAG</th><th>Modular RAG</th></tr></thead>
+<tbody>
+<tr><td>Ý tưởng</td><td>Lập chỉ mục → truy hồi → sinh, một lượt, cố định</td><td>Giữ dòng chảy tuyến tính nhưng thêm tối ưu <em>trước</em> và <em>sau</em> truy hồi</td><td>Pipeline gồm các mô-đun thay thế được, có thể lặp, rẽ nhánh, định tuyến</td></tr>
+<tr><td>Kỹ thuật điển hình</td><td>Chunk cố định, một bộ truy hồi vector, top-k vào prompt</td><td>Chunking tốt hơn, metadata, viết lại truy vấn, hybrid search, rerank, nén ngữ cảnh</td><td>Định tuyến truy vấn, truy hồi lặp, kết hợp nhiều nguồn và công cụ, mô-đun bộ nhớ</td></tr>
+<tr><td>Lỗi hay gặp</td><td>Truy hồi kém chính xác, ngữ cảnh nhiễu, câu trả lời không bám tài liệu</td><td>Độ phức tạp tăng, cần đánh giá để biết bước nào thực sự giúp</td><td>Khó dự đoán độ trễ và chi phí, khó gỡ lỗi, đánh giá đầu-cuối phức tạp</td></tr>
+<tr><td>Phù hợp khi</td><td>Mẫu thử, kho nhỏ đồng nhất</td><td>Đa số hệ thống hỏi đáp tài liệu sản xuất</td><td>Câu hỏi đa dạng, nhiều nguồn, cần suy luận nhiều bước</td></tr>
+</tbody>
+</table>
+<div class="callout nhan-dinh">
+<p>Chúng tôi cho rằng nên đọc ba nhãn này như một <em>danh mục công cụ</em> hơn là lộ trình tiến hóa. Một hệ thống “naive” có dữ liệu sạch, chunking theo cấu trúc và bộ đánh giá tốt thường đáng tin hơn một hệ thống “modular” mười bước chưa từng được đo. Thêm mô-đun khi số đo chỉ ra điểm nghẽn, không phải vì mô-đun đó có tên trong khảo sát.</p>
+</div>
+
+<h2>Mỗi quyết định thiết kế nằm ở đâu — và đổi lại tốn bao nhiêu</h2>
+<p>Một tiêu chí thực dụng để phân bổ thời gian suy nghĩ: <strong>chi phí đảo ngược</strong>. Quyết định nào buộc lập chỉ mục lại toàn bộ kho thì đáng cân nhắc kỹ từ đầu; quyết định nào đổi được trong một buổi chiều thì cứ chọn mặc định hợp lý rồi đo.</p>
+<table>
+<thead><tr><th>Quyết định</th><th>Thành phần</th><th>Đổi lại cần làm gì</th><th>Chi phí đảo ngược</th></tr></thead>
+<tbody>
+<tr><td>Nguồn nào được đưa vào, đồng bộ thế nào</td><td>Connector</td><td>Viết lại đồng bộ, thu thập lại</td><td>Cao</td></tr>
+<tr><td>Cách lưu quyền truy cập</td><td>Connector, metadata</td><td>Thu thập lại metadata cho mọi chunk</td><td>Cao — và rủi ro bảo mật nếu sai</td></tr>
+<tr><td>Trích xuất PDF/bảng, chuẩn hóa Unicode</td><td>Trích xuất</td><td>Xử lý lại → chunk lại → embed lại</td><td>Cao</td></tr>
+<tr><td>Chiến lược và kích thước chunk</td><td>Chunking</td><td>Chunk lại, embed lại; nhãn đánh giá gắn theo mã chunk có thể mất hiệu lực</td><td>Cao</td></tr>
+<tr><td>Mô hình embedding</td><td>Embedding</td><td>Embed lại toàn bộ kho và mọi biểu diễn phụ</td><td>Cao (tỷ lệ với kích thước kho)</td></tr>
+<tr><td>Tham số chỉ mục ANN</td><td>Chỉ mục</td><td>Xây lại chỉ mục từ vector đã có</td><td>Trung bình</td></tr>
+<tr><td>Có dùng hybrid search, trọng số kết hợp</td><td>Truy hồi</td><td>Cần sẵn chỉ mục BM25; trọng số đổi được ngay</td><td>Thấp–trung bình</td></tr>
+<tr><td>Reranker, số ứng viên, số đoạn cuối</td><td>Rerank, ghép ngữ cảnh</td><td>Đổi cấu hình, đo lại</td><td>Thấp</td></tr>
+<tr><td>Prompt, định dạng trích dẫn</td><td>Sinh</td><td>Đổi văn bản, đo lại</td><td>Thấp</td></tr>
+<tr><td>LLM sinh</td><td>Sinh</td><td>Kiểm thử lại toàn bộ; có thể phải chỉnh prompt</td><td>Thấp–trung bình</td></tr>
+</tbody>
+</table>
+<div class="callout kinh-nghiem">
+<p>Một thực hành giúp giảm chi phí đảo ngược: lưu <em>văn bản đã trích xuất và chuẩn hóa</em> như một tầng trung gian có phiên bản, tách khỏi chỉ mục. Khi đổi chunking hoặc mô hình embedding, bạn chạy lại từ tầng này thay vì từ PDF gốc. Tương tự, gắn nhãn đánh giá theo <em>tài liệu + vị trí đoạn văn</em> thay vì theo mã chunk, để bộ kiểm thử vẫn dùng được sau khi chunk lại. Đây là kinh nghiệm thực hành, không phải yêu cầu bắt buộc.</p>
+</div>
+
+<h2>Tối thiểu hay sản xuất</h2>
+<p>Bạn không cần mọi thành phần ngay từ ngày đầu. Bảng dưới phân biệt cái <em>đủ để học và đo</em> với cái <em>cần trước khi người dùng thật dựa vào hệ thống</em>.</p>
+<table>
+<thead><tr><th>Thành phần</th><th>Bản tối thiểu (mẫu thử)</th><th>Bản sản xuất</th></tr></thead>
+<tbody>
+<tr><td>Nguồn</td><td>Một thư mục tài liệu, nạp thủ công</td><td>Connector tự động, đồng bộ tăng dần, phát hiện xóa</td></tr>
+<tr><td>Trích xuất</td><td>Thư viện trích văn bản mặc định</td><td>Trích theo cấu trúc, xử lý bảng/OCR, chuẩn hóa Unicode, khử trùng lặp, kiểm tra mẫu định kỳ</td></tr>
+<tr><td>Chunking</td><td>Theo đoạn/câu với kích thước cố định</td><td>Theo cấu trúc tài liệu, có tiêu đề ngữ cảnh, được chọn bằng đánh giá</td></tr>
+<tr><td>Metadata</td><td>Tên tệp, số trang</td><td>Đường dẫn mục, phiên bản, ngày hiệu lực, ngôn ngữ, ACL, loại tài liệu</td></tr>
+<tr><td>Truy hồi</td><td>Chỉ vector, top-5</td><td>Hybrid + lọc metadata + rerank</td></tr>
+<tr><td>Sinh</td><td>Một prompt “chỉ trả lời từ tài liệu”</td><td>Prompt có phiên bản, trích dẫn có cấu trúc, xử lý “không đủ thông tin”, hậu kiểm</td></tr>
+<tr><td>Phân quyền</td><td>Không (dữ liệu công khai)</td><td>Lọc theo quyền ở tầng truy hồi, kiểm thử rò rỉ giữa nhóm</td></tr>
+<tr><td>Đánh giá</td><td>30–50 câu hỏi tự viết</td><td>Bộ kiểm thử theo loại câu hỏi, chạy tự động mỗi lần đổi cấu hình, bổ sung từ log</td></tr>
+<tr><td>Giám sát</td><td>In ra màn hình</td><td>Log có cấu trúc, dashboard độ trễ/chi phí, thu phản hồi người dùng</td></tr>
+<tr><td>Bảo mật</td><td>—</td><td>Chống prompt injection gián tiếp, kiểm soát nguồn dữ liệu, xử lý PII</td></tr>
+</tbody>
+</table>
+
+<h2>Bản đồ sổ tay: thành phần nào đọc ở đâu</h2>
+<table>
+<thead><tr><th>Thành phần / câu hỏi</th><th>Đọc ở</th></tr></thead>
+<tbody>
+<tr><td>Có nên dùng RAG? RAG khác gì các phương án khác?</td><td>[[link:nen-tang]]: [[link:nen-tang/rag-la-gi]], [[link:nen-tang/khi-nao-dung-rag]]</td></tr>
+<tr><td>Nguồn, trích xuất, làm sạch</td><td>[[link:du-lieu]]: [[link:du-lieu/thu-thap-lam-sach]]</td></tr>
+<tr><td>Chunking, metadata, biểu diễn tài liệu</td><td>[[link:du-lieu/chunking]], [[link:du-lieu/metadata-va-bieu-dien]]</td></tr>
+<tr><td>Embedding và chỉ mục vector</td><td>[[link:truy-hoi]]: [[link:truy-hoi/embedding]], [[link:truy-hoi/vector-index]]</td></tr>
+<tr><td>Xử lý truy vấn, hybrid search, rerank</td><td>[[link:tim-kiem]]: [[link:tim-kiem/xu-ly-truy-van]], [[link:tim-kiem/hybrid-search]], [[link:tim-kiem/reranking]]</td></tr>
+<tr><td>Ghép ngữ cảnh, sinh, trích dẫn</td><td>[[link:sinh]]: [[link:sinh/xay-dung-context]], [[link:sinh/trich-dan-grounding]]</td></tr>
+<tr><td>Đánh giá và chẩn đoán lỗi</td><td>[[link:danh-gia]]: [[link:danh-gia/do-luong-retrieval]], [[link:danh-gia/danh-gia-generation]], [[link:danh-gia/chan-doan-loi]]</td></tr>
+<tr><td>Độ trễ, chi phí, phân quyền, bảo mật</td><td>[[link:van-hanh]]: [[link:van-hanh/chi-phi-do-tre]], [[link:van-hanh/bao-mat]]</td></tr>
+<tr><td>Truy hồi lặp, agent, GraphRAG, tình huống ứng dụng</td><td>[[link:nang-cao]]: [[link:nang-cao/agentic-graphrag]], [[link:nang-cao/tinh-huong-ung-dung]]</td></tr>
+<tr><td>Dựng thử và kiểm tra trước khi phát hành</td><td>[[link:thuc-hanh]]: [[link:thuc-hanh/rag-dau-tien]], [[link:thuc-hanh/checklist-trien-khai]]</td></tr>
+</tbody>
+</table>
+
+<div class="callout canh-bao">
+<p><strong>Lỗi kiến trúc thường gặp</strong></p>
+<ul>
+<li><em>Không lưu tầng văn bản trung gian</em> — mọi thay đổi chunking đều phải chạy lại trích xuất PDF tốn kém.</li>
+<li><em>Lọc quyền sau khi sinh</em> — mô hình đã đọc nội dung bị cấm; chỉ còn hy vọng nó không nhắc đến.</li>
+<li><em>Không có định danh ổn định cho tài liệu</em> — không cập nhật hoặc xóa được một tài liệu cụ thể trong chỉ mục, dẫn tới trùng lặp phiên bản cũ và mới.</li>
+<li><em>Log chỉ câu hỏi và câu trả lời</em> — thiếu danh sách đoạn truy hồi thì không phân biệt được lỗi truy hồi với lỗi sinh.</li>
+<li><em>Tối ưu thành phần trước khi có bộ đánh giá</em> — không biết thay đổi có giúp hay không.</li>
+</ul>
+</div>
+
+<h2>Tự kiểm tra</h2>
+<div class="callout kiem-chung">
+<ol>
+<li>Vẽ lại sơ đồ cho hệ thống của bạn và đánh dấu: dữ liệu quyền truy cập đi vào ở ô nào, được áp dụng ở ô nào?</li>
+<li>Nếu ngày mai bạn đổi mô hình embedding, liệt kê các bước phải chạy lại. Bạn có tầng văn bản trung gian không? Bộ kiểm thử có còn dùng được không?</li>
+<li>Chọn ngẫu nhiên một câu trả lời trong log: bạn có tái hiện được chính xác các đoạn đã được đưa vào prompt không?</li>
+<li>Với mỗi điểm lỗi trong danh sách của Barnett và cộng sự, chỉ ra thành phần tương ứng trên sơ đồ.</li>
+</ol>
+</div>
+
+<h2>Đọc tiếp</h2>
+<ul>
+<li>Bắt đầu đi sâu từ đầu nguồn: [[link:du-lieu/thu-thap-lam-sach]].</li>
+<li>Muốn dựng ngay một bản tối thiểu để có số đo: [[link:thuc-hanh/rag-dau-tien]].</li>
+<li>Trước khi đưa vào sản xuất: [[link:thuc-hanh/checklist-trien-khai]].</li>
+<li>Đọc gốc: khảo sát của Gao et al.[[cite:gao2023survey]] để tra cứu kỹ thuật theo thành phần; Barnett et al.[[cite:barnett2024]] cho bài học vận hành.</li>
+</ul>

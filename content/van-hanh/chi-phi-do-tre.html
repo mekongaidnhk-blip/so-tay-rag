@@ -1,0 +1,280 @@
+---
+{
+  "title": "Chi phí và độ trễ: một truy vấn RAG tốn bao nhiêu thời gian và tiền?",
+  "navTitle": "Chi phí & độ trễ",
+  "description": "Phân rã độ trễ theo từng bước của pipeline RAG, mô hình chi phí theo truy vấn, các tầng cache và rủi ro của chúng, chi phí cập nhật chỉ mục, quản lý phiên bản và giám sát trong sản xuất.",
+  "lead": "Bản demo RAG trả lời trong vài giây với chi phí không đáng kể. Khi lên sản xuất với hàng nghìn người dùng, câu hỏi đổi thành: vì sao p95 lên tới 8 giây, vì sao hóa đơn tháng này gấp ba tháng trước, và thay mô hình embedding thì mất bao lâu? Bài này cho bạn cách phân rã độ trễ và chi phí thành từng thành phần đo được, rồi chỉ ra đòn bẩy nằm ở đâu.",
+  "level": "Trung cấp",
+  "reviewed": "2026-10-22",
+  "kinds": ["nen-tang", "kinh-nghiem", "nhan-dinh"]
+}
+---
+<div class="callout tom-tat">
+<ul>
+<li>Độ trễ RAG là <strong>tổng các bước tuần tự</strong> (xác thực → xử lý truy vấn → truy hồi → rerank → sinh). Thường hai khoản lớn nhất là <em>các lần gọi LLM</em>: lần viết lại truy vấn (nếu có) và lần sinh câu trả lời.</li>
+<li>Với bước sinh, hãy tách <strong>TTFT</strong> (time-to-first-token — thời gian tới token đầu tiên, tăng theo độ dài prompt) khỏi <strong>tốc độ sinh</strong> (token/giây, quyết định thời gian theo độ dài câu trả lời). Streaming làm người dùng cảm nhận TTFT thay vì tổng thời gian.</li>
+<li>Chi phí mỗi truy vấn chủ yếu là <strong>token đầu vào của ngữ cảnh truy hồi</strong> và token đầu ra. Giảm số chunk đưa vào prompt (nhờ rerank tốt hơn) thường là đòn bẩy lớn nhất.</li>
+<li>Cache có nhiều tầng. Prompt caching của nhà cung cấp gần như không rủi ro về đúng/sai; <em>cache câu trả lời theo ngữ nghĩa</em> thì có thể trả lời sai câu hỏi “gần giống”, và có thể làm lộ dữ liệu giữa người dùng nếu khóa cache thiếu phạm vi quyền.</li>
+<li>Ghi phiên bản cho mọi thứ (mô hình embedding, cấu hình chunking, chỉ mục, prompt, LLM) và log theo từng truy vấn. Thiếu thông tin này thì không chẩn đoán được khi chất lượng thay đổi.</li>
+</ul>
+</div>
+
+<h2>Vì sao bản demo nhanh và rẻ, còn bản sản xuất thì không</h2>
+<p>Bản demo thường chỉ có một người dùng, kho vài trăm tài liệu, prompt ngắn và không có bước phụ nào. Khi đưa vào sản xuất, các bước được thêm dần, bước nào cũng có lý do riêng: viết lại truy vấn cho câu hỏi hội thoại, kết hợp BM25 với vector, rerank 50 ứng viên, đưa lịch sử hội thoại vào prompt, chấm điểm câu trả lời bằng một LLM khác để giám sát. Mỗi bước thêm vài trăm mili-giây và vài nghìn token. Không ai quyết định “làm hệ thống chậm gấp ba”, nhưng kết quả cuối cùng là như vậy.</p>
+<p>Cách tiếp cận bền vững là coi độ trễ và chi phí như <strong>ngân sách</strong> (budget): đặt mục tiêu tổng (ví dụ “p95 dưới 3 giây tới token đầu tiên”, “dưới X đồng mỗi truy vấn”), chia cho từng bước, đo thực tế theo từng bước và chỉ thêm bước mới khi nó chứng minh được giá trị trên bộ đánh giá. Bài [[link:nen-tang/kien-truc-tong-quan]] mô tả các thành phần; bài này nhìn chúng qua lăng kính thời gian và tiền.</p>
+
+<h2>Giải phẫu độ trễ của một truy vấn</h2>
+<figure class="diagram">
+<svg viewBox="0 0 760 300" width="760" role="img" aria-labelledby="cd1t cd1d">
+<title id="cd1t">Dòng thời gian minh họa của một truy vấn RAG</title>
+<desc id="cd1d">Các bước xếp theo thời gian: xác thực, viết lại truy vấn bằng LLM, embedding truy vấn, BM25 và ANN chạy song song, rerank, prefill của LLM tới token đầu tiên, rồi giai đoạn sinh token dài nhất. Token đầu tiên xuất hiện khoảng 1,3 giây; câu trả lời đầy đủ khoảng 4,8 giây. Số liệu chỉ để minh họa.</desc>
+<defs><marker id="cd1a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="arrowhead"/></marker></defs>
+<text x="20" y="22" font-size="12.5" font-weight="700" class="muted">VÍ DỤ MINH HỌA — KHÔNG PHẢI SỐ ĐO</text>
+<text x="170" y="53" font-size="12.5" text-anchor="end">Xác thực, lấy quyền</text>
+<rect x="180" y="40" width="4" height="18" rx="2" class="box-b"/>
+<text x="170" y="83" font-size="12.5" text-anchor="end">Viết lại truy vấn (LLM)</text>
+<rect x="182" y="70" width="46" height="18" rx="3" class="box-w"/><text x="234" y="83" font-size="11.5" class="muted">~400 ms</text>
+<text x="170" y="113" font-size="12.5" text-anchor="end">Embedding truy vấn</text>
+<rect x="228" y="100" width="5" height="18" rx="2" class="box"/><text x="239" y="113" font-size="11.5" class="muted">~30 ms</text>
+<text x="170" y="143" font-size="12.5" text-anchor="end">BM25 ‖ ANN (song song)</text>
+<rect x="232" y="130" width="7" height="18" rx="2" class="box"/><text x="245" y="143" font-size="11.5" class="muted">~60 ms</text>
+<text x="170" y="173" font-size="12.5" text-anchor="end">Rerank 50 ứng viên</text>
+<rect x="239" y="160" width="17" height="18" rx="3" class="box-a"/><text x="262" y="173" font-size="11.5" class="muted">~150 ms</text>
+<text x="170" y="203" font-size="12.5" text-anchor="end">LLM: prefill → token đầu</text>
+<rect x="256" y="190" width="69" height="18" rx="3" class="box-w"/><text x="331" y="203" font-size="11.5" class="muted">~600 ms</text>
+<text x="170" y="233" font-size="12.5" text-anchor="end">LLM: sinh 350 token</text>
+<rect x="325" y="220" width="402" height="18" rx="3" class="box-v"/><text x="526" y="233" font-size="11.5" text-anchor="middle">~3,5 s ở 100 token/giây</text>
+<path d="M325 34 V250" class="ln-d"/>
+<text x="330" y="44" font-size="11.5" class="muted">token đầu tiên ≈ 1,3 s (TTFT)</text>
+<path d="M727 120 V250" class="ln-d"/>
+<text x="722" y="114" font-size="11.5" text-anchor="end" class="muted">câu trả lời đủ ≈ 4,8 s</text>
+<path d="M180 262 H740" class="ln" marker-end="url(#cd1a)"/>
+<text x="180" y="280" font-size="11" text-anchor="middle" class="muted">0 s</text>
+<text x="295" y="280" font-size="11" text-anchor="middle" class="muted">1 s</text>
+<text x="410" y="280" font-size="11" text-anchor="middle" class="muted">2 s</text>
+<text x="525" y="280" font-size="11" text-anchor="middle" class="muted">3 s</text>
+<text x="640" y="280" font-size="11" text-anchor="middle" class="muted">4 s</text>
+</svg>
+<figcaption>Dòng thời gian minh họa (số liệu giả định, không phải benchmark). Các bước trước token đầu tiên cộng dồn tuần tự. Với câu trả lời dài, giai đoạn sinh token chiếm phần lớn tổng thời gian; streaming giúp người dùng không phải chờ hết giai đoạn đó.</figcaption>
+</figure>
+
+<div class="callout nen-tang">
+<p><strong>Hai đại lượng của bước sinh.</strong> Khi gọi LLM, mô hình trước hết phải xử lý toàn bộ prompt (giai đoạn <em>prefill</em>), sau đó sinh từng token một (giai đoạn <em>decode</em>). Vì vậy:</p>
+<ul>
+<li><strong>TTFT</strong> tăng theo số token đầu vào: prompt có 10 chunk thì tới token đầu chậm hơn prompt có 3 chunk.</li>
+<li><strong>Thời gian sinh</strong> ≈ số token đầu ra ÷ tốc độ sinh (token/giây). Câu trả lời dài gấp đôi thì phần này lâu gấp đôi.</li>
+</ul>
+<p>Tổng độ trễ ≈ (các bước tiền xử lý tuần tự) + TTFT + (token đầu ra ÷ tốc độ). Các bước chạy song song chỉ tính bước lâu nhất.</p>
+</div>
+
+<h3>Từng bước tốn thời gian ở đâu</h3>
+<ul>
+<li><strong>Xác thực và lấy quyền.</strong> Hệ thống cần biết người dùng thuộc nhóm nào để lọc tài liệu (xem [[link:van-hanh/bao-mat]]). Nếu phải gọi dịch vụ danh bạ (directory) ở mỗi truy vấn, bước này có thể tốn hàng chục tới hàng trăm mili-giây. Cache danh sách nhóm trong thời gian ngắn thì nhanh hơn, đổi lại việc thu hồi quyền có độ trễ.</li>
+<li><strong>Viết lại truy vấn.</strong> Biến “thế còn hàng giảm giá thì sao?” thành câu hỏi độc lập cần thêm một lần gọi LLM, kèm đủ TTFT và thời gian sinh của lần gọi đó. Trong nhiều hệ thống, đây là bước <em>đắt nhất trước bước sinh</em>. Xem [[link:tim-kiem/xu-ly-truy-van]].</li>
+<li><strong>Embedding truy vấn.</strong> Một câu ngắn, thường nhanh. Phần lớn thời gian là độ trễ mạng nếu gọi API bên ngoài.</li>
+<li><strong>Tìm kiếm.</strong> Tìm kiếm lân cận gần đúng (ANN — approximate nearest neighbor) trên chỉ mục đã nạp vào bộ nhớ thường nhanh. Nó chậm đi khi chỉ mục không vừa RAM, khi bộ lọc metadata quá chặt, hoặc khi tham số tìm kiếm được đặt cao để tăng recall. Xem [[link:truy-hoi/vector-index]]. BM25 và vector nên chạy song song rồi hợp nhất ([[link:tim-kiem/hybrid-search]]).</li>
+<li><strong>Rerank.</strong> Cross-encoder phải chấm từng cặp (truy vấn, ứng viên), nên thời gian tăng gần tuyến tính theo <em>số ứng viên × độ dài ứng viên</em>. Rerank 200 ứng viên thay vì 50 là cách nhanh nhất để thêm vài trăm mili-giây. Xem [[link:tim-kiem/reranking]].</li>
+<li><strong>Sinh câu trả lời.</strong> TTFT phụ thuộc độ dài prompt, kích thước mô hình và tải của nhà cung cấp. Thời gian sinh phụ thuộc độ dài câu trả lời.</li>
+<li><strong>Hậu kiểm (nếu có).</strong> Kiểm tra trích dẫn, lọc nội dung, chấm điểm bằng LLM khác. Nếu chạy đồng bộ trước khi hiển thị, chúng cộng thẳng vào độ trễ và làm mất lợi ích của streaming.</li>
+</ul>
+
+<h3>Ví dụ ngân sách độ trễ</h3>
+<p>Bảng dưới đây là <strong>ví dụ cách lập ngân sách</strong> cho một trợ lý nội bộ, với mục tiêu “token đầu tiên dưới 1,5 giây ở p50”. Con số là giả định để minh họa phương pháp, <em>không phải số đo hay benchmark</em>. Hệ thống của bạn có thể khác rất xa tùy hạ tầng, mô hình và vùng địa lý.</p>
+<table>
+<thead><tr><th>Bước</th><th>Ngân sách ví dụ (p50)</th><th>Yếu tố chi phối</th><th>Đòn bẩy chính</th></tr></thead>
+<tbody>
+<tr><td>Xác thực + quyền</td><td>20 ms</td><td>Gọi dịch vụ danh bạ</td><td>Cache nhóm quyền ngắn hạn (cân nhắc độ trễ thu hồi)</td></tr>
+<tr><td>Viết lại truy vấn</td><td>300–500 ms</td><td>Một lần gọi LLM</td><td>Chỉ viết lại khi có lịch sử hội thoại; dùng mô hình nhỏ; giới hạn đầu ra ngắn</td></tr>
+<tr><td>Embedding truy vấn</td><td>20–50 ms</td><td>Mạng, kích thước mô hình</td><td>Tự host gần dịch vụ tìm kiếm; cache theo chuỗi truy vấn</td></tr>
+<tr><td>BM25 ‖ ANN</td><td>30–80 ms</td><td>Kích thước chỉ mục, bộ lọc, tham số tìm kiếm</td><td>Chạy song song; chỉnh tham số theo đường cong recall/độ trễ</td></tr>
+<tr><td>Rerank</td><td>100–200 ms</td><td>Số ứng viên × độ dài</td><td>Giảm ứng viên (50 thay vì 200), cắt độ dài ứng viên, GPU</td></tr>
+<tr><td>Prefill → token đầu</td><td>400–800 ms</td><td>Token đầu vào, mô hình</td><td>Ít chunk hơn, prompt caching cho phần tĩnh</td></tr>
+<tr><td>Sinh câu trả lời</td><td>Tùy độ dài</td><td>Token đầu ra ÷ tốc độ</td><td>Streaming; yêu cầu câu trả lời súc tích</td></tr>
+</tbody></table>
+<p>Cộng các cận dưới của sáu bước trước token đầu tiên được khoảng 0,87 giây; cộng các cận trên được khoảng 1,65 giây, tức là vượt mục tiêu 1,5 giây. Đó chính là ý nghĩa của ngân sách: không thể để mọi bước cùng chạm trần. Nếu bước viết lại truy vấn tốn 500 ms thì prefill phải nằm ở nửa dưới khoảng của nó, hoặc phải bỏ bớt một bước.</p>
+
+<div class="callout kinh-nghiem">
+<p><strong>Đo p95, không chỉ trung bình.</strong> Người dùng nhớ những lần chờ lâu nhất. Độ trễ đuôi (p95, p99) của một pipeline tuần tự thường xấu hơn tổng các p50, vì chỉ cần một bước chậm là cả truy vấn chậm. Thực hành phổ biến là đặt <em>timeout và phương án dự phòng</em> cho từng bước: nếu reranker quá thời gian thì dùng thứ tự sau hợp nhất; nếu bước viết lại quá thời gian thì dùng câu hỏi gốc. Chất lượng giảm nhẹ trong vài trường hợp vẫn tốt hơn một truy vấn treo 10 giây. Đây là quy tắc kinh nghiệm, không phải định luật; ngưỡng timeout cần đặt theo số đo của chính bạn.</p>
+</div>
+
+<h3>Streaming và những gì nó không giải quyết</h3>
+<p>Streaming gửi từng phần câu trả lời về trình duyệt ngay khi mô hình sinh ra, nên độ trễ <em>cảm nhận</em> gần với TTFT. Nhưng streaming có ba hệ quả thiết kế cần tính trước:</p>
+<ol>
+<li><strong>Hậu kiểm phải chạy song song hoặc sau.</strong> Nếu bạn muốn kiểm tra mọi trích dẫn có thật sự ủng hộ nhận định ([[link:sinh/trich-dan-grounding]]) trước khi hiển thị, bạn không thể stream. Một cách thỏa hiệp là stream văn bản, rồi gắn hoặc gỡ dấu trích dẫn sau khi kiểm tra xong.</li>
+<li><strong>Không rút lại được chữ đã hiển thị.</strong> Bộ lọc nội dung chạy sau có thể phát hiện vấn đề khi người dùng đã đọc nửa câu trả lời.</li>
+<li><strong>Streaming không giảm chi phí.</strong> Số token vẫn như cũ.</li>
+</ol>
+
+<h2>Mô hình chi phí theo truy vấn</h2>
+<p>Chi phí của một truy vấn gồm phần <strong>biến đổi</strong> (tỷ lệ với số truy vấn) và phần <strong>cố định</strong> (hạ tầng chạy dù có ai hỏi hay không). Viết gọn:</p>
+<pre><code>chi_phí_truy_vấn ≈ Σ_các_lần_gọi_LLM [ token_vào × giá_vào + token_ra × giá_ra ]
+                + embedding_truy_vấn + rerank
+                + (hạ_tầng_cố_định + chi_phí_lập_chỉ_mục_khấu_hao) ÷ số_truy_vấn
+
+token_vào (lần sinh chính) = system_prompt + lịch_sử_hội_thoại + k × token_mỗi_chunk + câu_hỏi</code></pre>
+<table>
+<thead><tr><th>Thành phần</th><th>Tỷ lệ với</th><th>Thường lớn hay nhỏ?</th><th>Đòn bẩy</th></tr></thead>
+<tbody>
+<tr><td>Token ngữ cảnh truy hồi</td><td>k × độ dài chunk</td><td>Thường là phần lớn nhất của token đầu vào</td><td>Rerank tốt để giữ ít chunk; chunk gọn ([[link:du-lieu/chunking]]); nén ngữ cảnh ([[link:sinh/xay-dung-context]])</td></tr>
+<tr><td>Token đầu ra</td><td>Độ dài câu trả lời</td><td>Đơn giá token ra thường cao hơn token vào</td><td>Hướng dẫn trả lời súc tích; giới hạn độ dài tối đa</td></tr>
+<tr><td>Lịch sử hội thoại</td><td>Số lượt</td><td>Tăng dần theo hội thoại dài</td><td>Tóm tắt lịch sử; chỉ giữ vài lượt gần nhất</td></tr>
+<tr><td>Các lần gọi LLM phụ</td><td>Số bước (viết lại, phân loại, chấm điểm)</td><td>Hay bị bỏ quên khi ước tính</td><td>Dùng mô hình nhỏ; chấm điểm trên mẫu thay vì mọi truy vấn</td></tr>
+<tr><td>Embedding truy vấn</td><td>Số truy vấn</td><td>Thường rất nhỏ</td><td>Cache</td></tr>
+<tr><td>Reranker</td><td>Số ứng viên</td><td>Nhỏ tới trung bình</td><td>Giảm số ứng viên</td></tr>
+<tr><td>Vector DB, máy chủ</td><td>Kích thước chỉ mục, lượng bản sao</td><td>Cố định; đáng kể khi lưu lượng thấp</td><td>Lượng tử hóa vector, chọn đúng cỡ máy</td></tr>
+<tr><td>Lập chỉ mục, re-embedding</td><td>Kích thước kho, tần suất cập nhật</td><td>Đột biến khi đổi mô hình</td><td>Cập nhật tăng dần; xem mục dưới</td></tr>
+</tbody></table>
+
+<h3>Công cụ ước tính chi phí sinh câu trả lời</h3>
+<p>Công cụ dưới đây nhân các con số bạn nhập: số truy vấn mỗi ngày, số chunk và độ dài chunk, token system prompt, token đầu ra, tỷ lệ cache hit và <strong>đơn giá do bạn tự nhập</strong>. Công cụ không chứa bảng giá nào. Các giá trị mặc định chỉ để công cụ chạy được, <em>không phải giá của nhà cung cấp nào</em>. Đơn giá LLM thay đổi thường xuyên và khác nhau giữa các mô hình, nên hãy lấy số hiện hành từ trang giá chính thức của nhà cung cấp bạn dùng. Công cụ cũng chưa tính embedding, vector DB, reranker, các lần gọi LLM phụ và hạ tầng.</p>
+<div class="widget" data-widget="cost"><p>Bật JavaScript để dùng công cụ tương tác.</p></div>
+<p>Hãy thử một thí nghiệm nhỏ. Với giá trị mặc định (8 chunk × 400 token, 600 token system prompt và câu hỏi, 350 token đầu ra, đơn giá đầu ra gấp 5 lần đầu vào), phần ngữ cảnh truy hồi chiếm khoảng 58% chi phí mỗi truy vấn. Giảm từ 8 xuống 4 chunk thì chi phí mỗi truy vấn giảm khoảng 29%. Câu hỏi thật sự cần trả lời là <em>chất lượng có giảm theo không</em>. Đó là việc của bộ đánh giá ([[link:danh-gia/do-luong-retrieval]]), không phải của công cụ tính tiền.</p>
+
+<div class="callout canh-bao">
+<p><strong>Lỗi ước tính thường gặp:</strong> (1) quên các lần gọi LLM phụ (viết lại truy vấn, phân loại ý định, LLM-as-a-judge chạy trên mọi truy vấn); (2) quên lịch sử hội thoại, khiến lượt thứ mười tốn gấp nhiều lần lượt đầu; (3) quên lượt thử lại khi gặp lỗi hoặc timeout; (4) dùng độ dài câu trả lời trung bình trong khi phân bố có đuôi dài. Hãy ước tính từ <em>log thật</em> của giai đoạn thử nghiệm, không chỉ từ giả định.</p>
+</div>
+
+<h2>Cache: nhiều tầng, rủi ro rất khác nhau</h2>
+<p>“Thêm cache” có thể là một tối ưu an toàn, cũng có thể là nguồn gây lỗi sai và lộ dữ liệu. Tầng nào được cache sẽ quyết định điều đó.</p>
+<table>
+<thead><tr><th>Tầng cache</th><th>Khóa cache</th><th>Tiết kiệm</th><th>Rủi ro chính</th></tr></thead>
+<tbody>
+<tr><td>Embedding truy vấn</td><td>Chuỗi truy vấn đã chuẩn hóa + phiên bản mô hình embedding</td><td>Nhỏ</td><td>Gần như không có, miễn là khóa gồm phiên bản mô hình</td></tr>
+<tr><td>Kết quả truy hồi</td><td>Truy vấn + bộ lọc quyền + phiên bản chỉ mục</td><td>Độ trễ tìm kiếm và rerank</td><td>Trả kết quả cũ sau khi tài liệu được cập nhật hoặc quyền bị thu hồi</td></tr>
+<tr><td>Prompt caching của nhà cung cấp</td><td>Tiền tố prompt trùng khớp tuyệt đối</td><td>Chi phí và TTFT của phần tĩnh</td><td>Thấp; câu trả lời vẫn được sinh mới</td></tr>
+<tr><td>Cache câu trả lời chính xác</td><td>Câu hỏi chuẩn hóa + phạm vi quyền + phiên bản chỉ mục và prompt</td><td>Toàn bộ chi phí sinh</td><td>Câu trả lời lỗi thời; lộ dữ liệu nếu khóa thiếu phạm vi quyền</td></tr>
+<tr><td>Cache câu trả lời theo ngữ nghĩa</td><td>Embedding câu hỏi, so ngưỡng tương đồng</td><td>Toàn bộ chi phí sinh, kể cả với câu hỏi diễn đạt khác</td><td><strong>Trả lời sai câu hỏi gần giống</strong>; cộng thêm mọi rủi ro của cache chính xác</td></tr>
+</tbody></table>
+
+<h3>Cache câu trả lời theo ngữ nghĩa: hấp dẫn nhưng nguy hiểm</h3>
+<p>Ý tưởng là nếu câu hỏi mới có embedding đủ gần một câu hỏi đã trả lời thì trả lại câu trả lời cũ. Thư viện mã nguồn mở GPTCache triển khai đúng cơ chế này, và chính README của dự án thừa nhận cache ngữ nghĩa có thể gặp <em>dương tính giả</em> (trả nhầm) lẫn <em>âm tính giả</em> (bỏ lỡ)[[cite:zilliz2023gptcache]]. Trong RAG, dương tính giả thường rơi vào đúng những chỗ quan trọng nhất:</p>
+<ul>
+<li>“Lãi suất tiết kiệm kỳ hạn <strong>6 tháng</strong> là bao nhiêu?” và “… kỳ hạn <strong>12 tháng</strong> …” có embedding rất gần nhau nhưng đáp án khác nhau.</li>
+<li>“Hàng giảm giá <strong>có</strong> được đổi trả không?” và “Hàng giảm giá <strong>không</strong> được đổi trả à?” gần như trùng về từ vựng.</li>
+<li>Cùng một câu hỏi về chế độ phép nhưng người hỏi thuộc hai công ty con với chính sách khác nhau.</li>
+</ul>
+<p>Như bài [[link:truy-hoi/embedding]] đã phân tích, embedding nắm “chủ đề” tốt hơn các chi tiết như con số, phủ định hay đối tượng áp dụng. Đó chính là những chi tiết quyết định đáp án.</p>
+
+<div class="callout nhan-dinh">
+<p>Chúng tôi khuyên <strong>không bật cache câu trả lời theo ngữ nghĩa cho nội dung có số liệu, chính sách hay quyền truy cập khác nhau</strong>, trừ khi bạn đã đo tỷ lệ trả nhầm trên một tập cặp câu hỏi “gần mà khác” do chính bạn xây dựng. Nếu vẫn muốn dùng, hãy giới hạn cho một danh sách câu hỏi thường gặp đã được duyệt (kiểu FAQ). Khi đó, “cache” thực chất là bộ định tuyến tới câu trả lời soạn sẵn. Khóa cache luôn phải gồm phạm vi quyền, phiên bản chỉ mục và phiên bản prompt. Đây là nhận định của người biên soạn dựa trên các rủi ro nêu trên, chưa phải kết quả thực nghiệm có kiểm soát.</p>
+</div>
+
+<h3>Prompt caching của nhà cung cấp LLM</h3>
+<p>Nhiều nhà cung cấp cho phép tái sử dụng phần <em>tiền tố</em> (prefix) prompt đã xử lý ở các yêu cầu trước. Phần trùng được tính giá rẻ hơn và bỏ qua được một phần prefill. Câu trả lời vẫn được sinh mới, nên tầng cache này không có rủi ro “trả lời nhầm”. Tính đến 10/2026, theo tài liệu chính thức:</p>
+<ul>
+<li><strong>Anthropic (Claude API)</strong>: tiền tố được tính theo thứ tự công cụ → system → messages, tới điểm đánh dấu <code>cache_control</code>. Có thể đặt điểm đánh dấu thủ công hoặc dùng chế độ tự động. Tiền tố phải trùng khớp hoàn toàn. Thời gian sống mặc định là 5 phút (làm mới mỗi lần dùng), có tùy chọn 1 giờ. Ghi cache tính phí cao hơn giá đầu vào thường; đọc cache rẻ hơn nhiều. Hệ số cụ thể khác nhau theo mô hình và TTL. Prompt ngắn hơn ngưỡng tối thiểu (phụ thuộc mô hình) sẽ không được cache[[cite:anthropic2026cache]].</li>
+<li><strong>OpenAI</strong>: caching bật mặc định cho các mô hình được hỗ trợ. Muốn tái sử dụng thì toàn bộ tiền tố phải khớp. Có ngưỡng token tối thiểu và thời gian lưu giữ khác nhau theo thế hệ mô hình và tùy chọn. Tài liệu khuyến nghị đặt hướng dẫn ổn định và tài liệu tham chiếu dùng chung lên đầu, phần động (thời gian, thông tin riêng của người dùng) xuống cuối[[cite:openai2026cache]].</li>
+</ul>
+<p>Hệ quả với RAG: các chunk truy hồi <em>thay đổi theo từng câu hỏi</em>, nên prompt caching chủ yếu giúp phần tĩnh: system prompt, ví dụ mẫu (few-shot), định nghĩa công cụ, và lịch sử hội thoại trong phiên nhiều lượt. Thứ tự prompt nên là: <em>phần tĩnh → lịch sử → chunk truy hồi → câu hỏi</em>. Nếu system prompt ngắn hơn ngưỡng tối thiểu thì không có gì để cache. Với thiết kế này, hãy nhập tỷ lệ cache hit vừa phải vào công cụ ở trên, đừng đặt 90%.</p>
+<div class="callout canh-bao">
+<p><strong>Lỗi kinh điển làm mất cache:</strong> chèn thời gian hiện tại (“Hôm nay là 22/10/2026 14:03:27”), tên người dùng hoặc mã phiên vào <em>đầu</em> system prompt. Tiền tố thay đổi ở mọi yêu cầu nên không bao giờ có cache hit. Hãy đưa các trường động xuống cuối, và kiểm tra trường báo cáo token đã cache trong phản hồi API để xác nhận cache thực sự hoạt động.</p>
+</div>
+
+<h2>Cập nhật chỉ mục và chi phí re-embedding</h2>
+<p>Chỉ mục không lập một lần là xong. Tài liệu được thêm, sửa, xóa; quyền thay đổi; mô hình embedding có phiên bản mới. Mỗi loại thay đổi có chi phí và yêu cầu khác nhau.</p>
+<h3>Cập nhật tăng dần</h3>
+<ol class="steps">
+<li><strong>Phát hiện thay đổi bằng băm nội dung</strong>: lưu hash của từng chunk (sau khi làm sạch). Khi tài liệu thay đổi, chỉ embedding lại những chunk có hash mới. Một lỗi chính tả được sửa trong tài liệu 200 trang không nên kéo theo việc embedding lại 200 trang.</li>
+<li><strong>Xóa phải thật sự xóa</strong>: tài liệu bị gỡ khỏi nguồn phải bị gỡ khỏi chỉ mục vector, chỉ mục từ khóa, cache câu trả lời và kho tóm tắt (nếu có). Chunk “mồ côi” còn lại trong chỉ mục là nguồn của những câu trả lời dựa trên chính sách đã bãi bỏ.</li>
+<li><strong>Thay đổi quyền cần đồng bộ nhanh nhất</strong>: thu hồi quyền mà vài ngày sau chỉ mục mới cập nhật thì trong khoảng thời gian đó vẫn có rò rỉ. Nhiều hệ thống tách metadata quyền ra để cập nhật mà không cần embedding lại. Xem [[link:van-hanh/bao-mat]].</li>
+<li><strong>Ghi thời điểm lập chỉ mục</strong> vào metadata của chunk, để biết câu trả lời dựa trên dữ liệu cũ tới mức nào ([[link:du-lieu/metadata-va-bieu-dien]]).</li>
+</ol>
+<h3>Đổi mô hình embedding: chi phí ẩn lớn nhất</h3>
+<div class="callout nen-tang">
+<p>Vector do hai mô hình embedding khác nhau sinh ra (kể cả hai phiên bản của cùng một họ mô hình) nhìn chung <strong>không so sánh được với nhau</strong>, vì mỗi mô hình có không gian vector riêng. Đổi mô hình embedding đồng nghĩa với embedding lại <em>toàn bộ</em> kho và dựng lại chỉ mục. Không thể chỉ embedding lại truy vấn bằng mô hình mới.</p>
+</div>
+<p>Cách ước tính: <em>tổng token của kho</em> (số chunk × token mỗi chunk, cộng phần overlap) × đơn giá embedding, cộng thời gian tính toán và dựng lại chỉ mục ANN. Ví dụ, kho 2 triệu chunk × 400 token tương đương khoảng 800 triệu token cần embedding lại. Nhân với đơn giá hiện hành bạn sẽ có con số tiền. Nhưng thường thời gian mới là ràng buộc lớn hơn, vì giới hạn tốc độ (rate limit) của API có thể kéo việc này thành nhiều giờ hoặc nhiều ngày. Các API dạng batch, nếu nhà cung cấp hỗ trợ, thường hợp với việc này hơn API đồng bộ.</p>
+<div class="callout kinh-nghiem">
+<p><strong>Triển khai xanh–lam (blue-green) cho chỉ mục.</strong> Thực hành phổ biến: dựng chỉ mục mới song song với chỉ mục đang chạy, chạy bộ đánh giá trên cả hai, cho một phần nhỏ lưu lượng dùng chỉ mục mới (shadow hoặc canary), rồi mới chuyển bí danh (alias) sang chỉ mục mới. Giữ chỉ mục cũ một thời gian để quay lui. Trong giai đoạn chuyển tiếp, chi phí lưu trữ tăng gấp đôi; hãy tính khoản này vào kế hoạch.</p>
+</div>
+
+<h2>Quản lý phiên bản: biết chính xác cái gì đã trả lời</h2>
+<p>Khi người dùng báo “tuần trước hỏi câu này thì đúng, tuần này lại sai”, bạn cần trả lời được: <em>giữa hai lần đó, cái gì đã thay đổi?</em> Một pipeline RAG có ít nhất sáu thứ có thể thay đổi độc lập:</p>
+<table>
+<thead><tr><th>Thành phần</th><th>Ví dụ định danh phiên bản</th><th>Thay đổi kéo theo</th></tr></thead>
+<tbody>
+<tr><td>Dữ liệu nguồn</td><td>Ngày đồng bộ, hash tài liệu</td><td>Cập nhật tăng dần</td></tr>
+<tr><td>Cấu hình làm sạch + chunking</td><td><code>chunker=v3 (theo tiêu đề, 512 token, overlap 64)</code></td><td>Chunk lại và embedding lại toàn bộ</td></tr>
+<tr><td>Mô hình embedding</td><td>Tên mô hình + phiên bản cụ thể</td><td>Embedding lại toàn bộ, dựng lại chỉ mục</td></tr>
+<tr><td>Chỉ mục</td><td><code>index=policies-2026-10-15</code></td><td>Đánh giá lại recall</td></tr>
+<tr><td>Reranker</td><td>Tên mô hình + phiên bản</td><td>Đánh giá lại thứ hạng</td></tr>
+<tr><td>Prompt template</td><td><code>prompt=answer-v12</code> (lưu trong git)</td><td>Đánh giá lại generation</td></tr>
+<tr><td>LLM</td><td>Mã mô hình cố định (snapshot), không chỉ bí danh “mới nhất”</td><td>Đánh giá lại toàn bộ</td></tr>
+</tbody></table>
+<div class="callout kinh-nghiem">
+<p>Nhiều nhà cung cấp có cả mã mô hình cố định theo ngày lẫn bí danh trỏ tới bản mới nhất. Dùng bí danh trong sản xuất nghĩa là mô hình có thể đổi mà bạn không triển khai gì. Thực hành phổ biến là cố định mã mô hình, theo dõi lịch ngừng hỗ trợ (deprecation) của nhà cung cấp, và nâng cấp có chủ đích: chạy bộ đánh giá trước, nâng cấp sau.</p>
+</div>
+
+<h2>Giám sát và quan sát (observability)</h2>
+<h3>Log gì cho mỗi truy vấn</h3>
+<p>Một bản ghi trace cho mỗi truy vấn, gồm một “span” cho từng bước, là nền móng cho cả chẩn đoán lỗi ([[link:danh-gia/chan-doan-loi]]) lẫn tối ưu chi phí:</p>
+<ul>
+<li><strong>Đầu vào</strong>: câu hỏi gốc, câu hỏi sau viết lại, mã người dùng hoặc nhóm quyền đã áp dụng (dạng giả danh hóa nếu cần).</li>
+<li><strong>Truy hồi</strong>: mã các chunk ứng viên kèm điểm BM25, điểm vector, điểm sau hợp nhất, điểm rerank; chunk nào được đưa vào prompt.</li>
+<li><strong>Sinh</strong>: số token vào, ra và đã cache; mã mô hình; phiên bản prompt; câu trả lời; các trích dẫn.</li>
+<li><strong>Thời gian</strong>: độ trễ từng bước, TTFT, tổng; timeout hoặc fallback nào đã kích hoạt.</li>
+<li><strong>Phiên bản</strong>: phiên bản chỉ mục, mô hình embedding, reranker (bảng ở trên).</li>
+<li><strong>Phản hồi</strong>: thích hoặc không thích, người dùng có hỏi lại ngay hay chuyển sang nhân viên hỗ trợ không.</li>
+</ul>
+<div class="callout canh-bao">
+<p>Log RAG chứa câu hỏi của người dùng <em>và</em> nội dung tài liệu nội bộ, tức là thường nhạy cảm hơn cả hai nguồn đó đứng riêng. Hãy áp dụng cùng mức phân quyền, mã hóa và thời hạn lưu trữ như dữ liệu gốc, và che thông tin cá nhân khi phù hợp. Chi tiết ở [[link:van-hanh/bao-mat]].</p>
+</div>
+
+<h3>Dashboard tối thiểu</h3>
+<table>
+<thead><tr><th>Nhóm</th><th>Chỉ số</th><th>Tín hiệu cần chú ý</th></tr></thead>
+<tbody>
+<tr><td>Độ trễ</td><td>p50/p95/p99 theo từng bước; TTFT</td><td>Một bước tăng đột biến; tỷ lệ timeout tăng</td></tr>
+<tr><td>Chi phí</td><td>Token vào và ra trung bình, chi phí theo ngày, tỷ lệ token đã cache</td><td>Token vào tăng dần (hội thoại dài hơn, chunk dài hơn sau khi đổi chunker)</td></tr>
+<tr><td>Truy hồi</td><td>Phân bố điểm top-1; tỷ lệ truy vấn mà mọi ứng viên có điểm thấp</td><td>Phân bố dịch chuyển: có thể có chủ đề mới chưa có tài liệu</td></tr>
+<tr><td>Câu trả lời</td><td>Tỷ lệ “không tìm thấy thông tin”; tỷ lệ câu trả lời có trích dẫn; điểm faithfulness trên mẫu</td><td>Tỷ lệ từ chối tăng (thiếu dữ liệu) hoặc giảm đột ngột (có thể đang bịa)</td></tr>
+<tr><td>Người dùng</td><td>Phản hồi tiêu cực, hỏi lại, chuyển sang nhân viên</td><td>Tăng theo một chủ đề hoặc nguồn cụ thể</td></tr>
+</tbody></table>
+
+<h3>Trôi dạt (drift) và vòng phản hồi</h3>
+<p>Hệ thống có thể xuống cấp mà không ai triển khai gì: người dùng hỏi về sản phẩm mới chưa có tài liệu (<em>trôi truy vấn</em>), tài liệu được viết lại theo mẫu khác làm bộ trích xuất hỏng (<em>trôi dữ liệu</em>), hoặc nhà cung cấp thay mô hình phía sau một bí danh (<em>trôi mô hình</em>). Cách phát hiện thực tế:</p>
+<ol class="steps">
+<li>Theo dõi phân bố điểm truy hồi và tỷ lệ câu hỏi không tìm được tài liệu, tách theo chủ đề.</li>
+<li>Gom cụm các câu hỏi gần đây và so với các cụm trong bộ đánh giá. Cụm mới lớn là tín hiệu cần bổ sung tài liệu hoặc câu hỏi kiểm thử.</li>
+<li>Định kỳ lấy mẫu các truy vấn có phản hồi tiêu cực, gán nhãn nguyên nhân (thiếu dữ liệu, truy hồi sai, sinh sai) và đưa vào bộ đánh giá hồi quy ([[link:danh-gia/danh-gia-generation]]).</li>
+<li>Chạy lại bộ đánh giá theo lịch, kể cả khi không triển khai gì, để bắt trôi mô hình.</li>
+</ol>
+
+<h2>Mở rộng quy mô</h2>
+<p>“Mở rộng” có hai trục độc lập, và mỗi trục có điểm nghẽn riêng:</p>
+<ul>
+<li><strong>Kho lớn hơn</strong> (từ 100 nghìn lên 100 triệu chunk): bộ nhớ chỉ mục ANN là ràng buộc chính. Các lựa chọn là lượng tử hóa vector (đổi chút recall lấy bộ nhớ), chỉ mục trên đĩa, hoặc chia shard. Bài [[link:truy-hoi/vector-index]] phân tích đánh đổi này. Kho lớn cũng làm việc lọc theo metadata và quyền quan trọng hơn, vì lọc kém thì nhiễu tăng theo kích thước kho.</li>
+<li><strong>Nhiều truy vấn hơn</strong> (từ 1 lên 100 truy vấn/giây): giới hạn tốc độ và hạn mức của API LLM thường đụng trần trước vector DB. Cần hàng đợi, giới hạn đồng thời, cơ chế thử lại có backoff, và phương án dự phòng (mô hình thay thế, thông báo “hệ thống đang bận”) thay vì để truy vấn treo. Reranker tự host cần GPU và tự scale theo tải.</li>
+</ul>
+<p>Với lập chỉ mục, hãy tách hẳn đường ống <em>ngoại tuyến</em> (lập chỉ mục, re-embedding) khỏi đường ống <em>trực tuyến</em> (trả lời truy vấn), để một đợt embedding lại hàng loạt không chiếm hết hạn mức API mà người dùng đang cần.</p>
+
+<h2>Những câu hỏi thường gặp</h2>
+<details class="qa"><summary>Có nên dùng LLM nhỏ hơn để giảm chi phí và độ trễ?</summary>
+<p>Có thể, nhưng hãy đổi từng bước một và đo. Bước viết lại truy vấn hay phân loại ý định thường chịu được mô hình nhỏ. Bước sinh câu trả lời cuối thì cần kiểm tra kỹ faithfulness và khả năng nói “không biết”. Một cấu hình phổ biến là dùng mô hình nhỏ cho các bước phụ và mô hình mạnh hơn cho bước sinh. Chỉ bộ đánh giá của bạn mới cho biết mức giảm chất lượng có chấp nhận được không.</p></details>
+<details class="qa"><summary>Ngữ cảnh dài rẻ dần, sao không đưa 50 chunk vào cho chắc?</summary>
+<p>Có ba lý do. Chi phí và TTFT vẫn tăng theo token. Nhiều đoạn không liên quan có thể làm câu trả lời kém đi[[cite:shi2023]]. Mô hình cũng không tận dụng đều thông tin ở mọi vị trí trong ngữ cảnh dài[[cite:liu2023lost]]. Rerank tốt rồi đưa ít chunk hơn thường cho kết quả tốt hơn với chi phí thấp hơn. Xem [[link:sinh/xay-dung-context]].</p></details>
+<details class="qa"><summary>Có cần chấm điểm mọi câu trả lời bằng LLM-as-a-judge trong sản xuất?</summary>
+<p>Hiếm khi cần. Chấm trên mọi truy vấn có thể làm chi phí LLM tăng gần gấp đôi. Thực hành phổ biến là chấm trên một mẫu ngẫu nhiên cộng với các truy vấn có tín hiệu xấu (phản hồi tiêu cực, điểm truy hồi thấp), chạy bất đồng bộ để không cộng vào độ trễ.</p></details>
+<details class="qa"><summary>Tối ưu độ trễ hay chi phí trước?</summary>
+<p>Hãy đo trước. Thường thì giảm token đầu vào cải thiện cả hai cùng lúc: ít chunk hơn nghĩa là rẻ hơn và TTFT ngắn hơn. Thêm bước (viết lại truy vấn, rerank) thì làm tăng cả hai, nên mỗi bước thêm vào phải có số đo chất lượng biện minh.</p></details>
+
+<h2>Tự kiểm tra</h2>
+<div class="callout kiem-chung">
+<ol>
+<li>Từ log của 1.000 truy vấn gần nhất, hãy vẽ biểu đồ độ trễ p50/p95 cho <em>từng bước</em>. Bước nào chiếm phần lớn nhất trước token đầu tiên? Có đúng như bạn đoán không?</li>
+<li>Tính token đầu vào trung bình ở lượt 1 và lượt 5 của hội thoại. Chênh bao nhiêu lần?</li>
+<li>Trong phản hồi API, trường token đã cache có lớn hơn 0 không? Nếu không, tìm xem phần nào của tiền tố thay đổi giữa các yêu cầu.</li>
+<li>Nếu đang dùng cache câu trả lời, hãy tạo 20 cặp câu hỏi “gần mà khác” (khác kỳ hạn, khác đối tượng, có hoặc không phủ định) và đếm số lần cache trả nhầm.</li>
+<li>Giả sử phải đổi mô hình embedding vào tuần sau: tổng số token của kho là bao nhiêu, với rate limit hiện tại thì mất bao lâu, và bạn đã có quy trình chuyển chỉ mục xanh–lam chưa?</li>
+</ol>
+</div>
+
+<h2>Đọc tiếp</h2>
+<ul>
+<li>Bài tiếp theo: [[link:van-hanh/bao-mat]]. Phân quyền, prompt injection, đầu độc dữ liệu và quyền riêng tư của log và embedding.</li>
+<li>Giảm số chunk mà không giảm chất lượng: [[link:tim-kiem/reranking]] và [[link:sinh/xay-dung-context]].</li>
+<li>Đánh đổi bộ nhớ, tốc độ và recall của chỉ mục: [[link:truy-hoi/vector-index]].</li>
+<li>Định tuyến để bỏ các bước đắt cho câu hỏi đơn giản: [[link:nang-cao/agentic-graphrag]].</li>
+<li>Danh sách kiểm tra trước khi phát hành: [[link:thuc-hanh/checklist-trien-khai]].</li>
+<li>Tài liệu chính thức về prompt caching: Anthropic[[cite:anthropic2026cache]], OpenAI[[cite:openai2026cache]]. Hãy đọc bản mới nhất, vì chi tiết thay đổi theo mô hình.</li>
+</ul>
