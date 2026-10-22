@@ -59,7 +59,7 @@
 <tr><td>Precision@k</td><td>(số liên quan trong top-k) / k</td><td>“Ngữ cảnh có bao nhiêu phần là nhiễu?”</td><td>Không</td></tr>
 <tr><td>Reciprocal Rank → MRR</td><td>1 / hạng của tài liệu liên quan đầu tiên (0 nếu không có); MRR = trung bình trên các truy vấn</td><td>“Kết quả đúng đầu tiên xuất hiện sớm tới đâu?”</td><td>Có, chỉ với tài liệu đúng đầu tiên</td></tr>
 <tr><td>nDCG@k</td><td>DCG@k / DCG@k lý tưởng; DCG = Σ gain(i) / log₂(i+1)</td><td>“Tài liệu tốt có được xếp lên trên không?” (hỗ trợ nhiều bậc)</td><td>Có, mọi vị trí</td></tr>
-<tr><td>AP → MAP</td><td>Trung bình Precision@i tại các vị trí i có tài liệu liên quan, chia cho R</td><td>Tổng hợp precision và recall theo thứ tự</td><td>Có</td></tr>
+<tr><td>AP → MAP</td><td>Tổng Precision@i tại các vị trí i có tài liệu liên quan, chia cho R (tài liệu liên quan không được tìm thấy đóng góp 0)</td><td>Tổng hợp precision và recall theo thứ tự</td><td>Có</td></tr>
 </tbody>
 </table>
 

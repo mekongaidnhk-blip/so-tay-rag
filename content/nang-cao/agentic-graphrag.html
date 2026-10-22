@@ -15,7 +15,7 @@
 <li><strong>Truy hồi lặp</strong> (IRCoT, FLARE) xen kẽ truy hồi với quá trình suy luận hoặc sinh. <strong>Tự đánh giá</strong> (Self-RAG, CRAG) kiểm tra tài liệu truy hồi trước khi dùng. <strong>Định tuyến</strong> (Adaptive-RAG) chọn chiến lược theo độ khó của câu hỏi.</li>
 <li><strong>Agentic RAG</strong> để LLM tự quyết định gọi công cụ tìm kiếm khi nào và với truy vấn gì, theo mẫu ReAct. Cách này linh hoạt nhất, nhưng chi phí và độ trễ khó đoán, khó đánh giá, và rủi ro prompt injection tăng khi có công cụ.</li>
 <li><strong>GraphRAG</strong> dựng đồ thị thực thể và tóm tắt cộng đồng bằng LLM để trả lời câu hỏi toàn cục. Chi phí lập chỉ mục cao, nên hãy bắt đầu với dữ liệu nhỏ.</li>
-<li>Nguyên tắc chung: <strong>đo trước, thêm sau</strong>. Phần lớn lỗi của RAG nằm ở dữ liệu và truy hồi cơ bản. Một agent phức tạp không sửa được tài liệu bị trích xuất sai.</li>
+<li>Nguyên tắc chung: <strong>đo trước, thêm sau</strong>. Theo kinh nghiệm, nhiều lỗi của RAG nằm ở dữ liệu và truy hồi cơ bản. Một agent phức tạp không sửa được tài liệu bị trích xuất sai.</li>
 </ul>
 </div>
 
@@ -155,7 +155,7 @@ Trả lời:  13 ngày/năm: 12 ngày cơ bản (Mục 4.2) + 1 ngày cho 5 năm
 </div>
 
 <h3>RAPTOR và tóm tắt phân cấp</h3>
-<p>Một hướng gần với GraphRAG là dựng <strong>cây tóm tắt</strong>: gom cụm các chunk, tóm tắt từng cụm, rồi gom cụm và tóm tắt tiếp các bản tóm tắt, tới khi có tầng tổng quan. Truy hồi có thể lấy nút ở nhiều tầng. RAPTOR là đại diện tiêu biểu của hướng này. Bài [[link:du-lieu/metadata-va-bieu-dien]] trình bày cách biểu diễn tài liệu ở nhiều mức chi tiết. Hướng này cũng có chi phí lập chỉ mục bằng LLM và rủi ro gộp quyền như GraphRAG.</p>
+<p>Một hướng gần với GraphRAG là dựng <strong>cây tóm tắt</strong>: gom cụm các chunk, tóm tắt từng cụm, rồi gom cụm và tóm tắt tiếp các bản tóm tắt, tới khi có tầng tổng quan. Truy hồi có thể lấy nút ở nhiều tầng. RAPTOR là đại diện tiêu biểu của hướng này[[cite:sarthi2024raptor]]. Bài [[link:du-lieu/metadata-va-bieu-dien]] trình bày cách biểu diễn tài liệu ở nhiều mức chi tiết. Hướng này cũng có chi phí lập chỉ mục bằng LLM và rủi ro gộp quyền như GraphRAG.</p>
 
 <h2>Truy hồi đa phương thức: khi tài liệu là hình ảnh</h2>
 <p>Nhiều tài liệu doanh nghiệp là bản scan, slide, báo cáo tài chính có biểu đồ, catalog sản phẩm. Trích xuất văn bản (OCR, phân tích bố cục) vừa chậm vừa dễ mất thông tin nằm trong bố cục, bảng và hình ([[link:du-lieu/thu-thap-lam-sach]]). ColPali (Faysse và cộng sự, ICLR 2025) đi theo hướng khác: <strong>embedding trực tiếp ảnh của trang tài liệu</strong> bằng một mô hình thị giác–ngôn ngữ (VLM). Mô hình sinh nhiều vector cho mỗi trang (multi-vector) và so khớp với truy vấn theo cơ chế tương tác muộn (late interaction). Các tác giả giới thiệu benchmark ViDoRe cho truy hồi tài liệu dạng ảnh, và báo cáo ColPali vượt xa các pipeline truy hồi tài liệu hiện đại, trong khi đơn giản và nhanh hơn[[cite:faysse2024colpali]].</p>

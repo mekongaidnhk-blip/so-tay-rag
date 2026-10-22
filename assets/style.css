@@ -101,6 +101,8 @@ a:hover { color: var(--accent); }
 }
 
 /* ---------- TOC ---------- */
+.main > .toc { display: none; }
+@media (min-width: 1280px) { .main > .toc { display: block; } .toc-inline { display: none; } }
 .toc { font-size: 14px; line-height: 1.45; margin: 0 0 24px; }
 .toc details { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px; background: var(--bg-card); }
 .toc summary { cursor: pointer; font-weight: 650; color: var(--ink); }

@@ -6,7 +6,7 @@
   "basePath": "/so-tay-rag/",
   "repo": "https://github.com/mekongaidnhk-blip/so-tay-rag",
   "updated": "2026-10-22",
-  "version": "1",
+  "version": "2",
   "sourceGroups": [
     "Bài báo nền tảng",
     "Retrieval và biểu diễn",

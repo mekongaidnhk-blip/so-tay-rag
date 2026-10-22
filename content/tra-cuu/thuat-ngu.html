@@ -29,7 +29,7 @@
 <h2 id="chu-b">B</h2>
 <dl class="glossary">
 <dt id="beir">BEIR</dt>
-<dd>Benchmark gồm 18 bộ dữ liệu truy hồi đa miền, dùng để đánh giá khả năng tổng quát hóa zero-shot của mô hình truy hồi. Nổi tiếng vì cho thấy BM25 là baseline rất khó vượt ngoài miền huấn luyện[[cite:thakur2021]].</dd>
+<dd>Benchmark gồm 18 bộ dữ liệu truy hồi đa miền, dùng để đánh giá khả năng tổng quát hóa zero-shot của mô hình truy hồi. Nổi tiếng vì cho thấy BM25 là baseline zero-shot rất mạnh: nhiều mô hình dense thời đó kém BM25 khi dùng ngoài miền huấn luyện[[cite:thakur2021]].</dd>
 <dt id="bi-encoder">Bi-encoder</dt>
 <dd>Kiến trúc mã hóa câu hỏi và tài liệu <em>riêng rẽ</em> thành hai vector rồi so sánh bằng cosine hoặc tích vô hướng. Vì vector tài liệu tính trước được, bi-encoder đủ nhanh để tìm trên hàng triệu đoạn; DPR là ví dụ kinh điển[[cite:karpukhin2020]]. Đối lập với <a href="#cross-encoder">cross-encoder</a>. Xem [[link:truy-hoi/embedding]].</dd>
 <dt id="bm25">BM25</dt>
@@ -87,13 +87,13 @@
 <dt id="fine-tuning">Fine-tuning (tinh chỉnh)</dt>
 <dd>Huấn luyện tiếp một mô hình đã có trên dữ liệu riêng để thay đổi hành vi, định dạng hoặc kiến thức. Trong thí nghiệm của Ovadia và cộng sự, RAG bổ sung kiến thức tốt hơn fine-tuning không giám sát[[cite:ovadia2023]]. Xem [[link:nen-tang/khi-nao-dung-rag]].</dd>
 <dt id="fusion-in-decoder">Fusion-in-Decoder (FiD)</dt>
-<dd>Kiến trúc mã hóa từng đoạn truy hồi riêng rẽ rồi hợp nhất chúng ở bộ giải mã khi sinh câu trả lời[[cite:izacard2021]]. Là một hướng RAG huấn luyện đầu-cuối, khác với cách ghép tài liệu vào prompt của LLM ngày nay.</dd>
+<dd>Kiến trúc mã hóa từng đoạn truy hồi riêng rẽ rồi hợp nhất chúng ở bộ giải mã khi sinh câu trả lời[[cite:izacard2021]]. Bộ sinh (reader) được huấn luyện riêng cho bài toán hỏi đáp, khác với cách ghép tài liệu vào prompt của một LLM có sẵn ngày nay.</dd>
 </dl>
 
 <h2 id="chu-g">G</h2>
 <dl class="glossary">
 <dt id="graphrag">GraphRAG</dt>
-<dd>Nhóm phương pháp xây đồ thị tri thức (thực thể, quan hệ, cụm chủ đề) từ kho tài liệu rồi truy hồi trên đồ thị, phù hợp câu hỏi cần tổng hợp toàn kho hoặc nối nhiều bước quan hệ. Chi phí lập chỉ mục cao hơn RAG thông thường. Xem [[link:nang-cao/agentic-graphrag]].</dd>
+<dd>Nhóm phương pháp xây đồ thị tri thức (thực thể, quan hệ, cụm chủ đề) từ kho tài liệu rồi truy hồi trên đồ thị, phù hợp câu hỏi cần tổng hợp toàn kho hoặc nối nhiều bước quan hệ. Chi phí lập chỉ mục cao hơn RAG thông thường[[cite:edge2024graphrag]]. Xem [[link:nang-cao/agentic-graphrag]].</dd>
 <dt id="grounding">Grounding (bám nguồn)</dt>
 <dd>Việc buộc câu trả lời dựa trên nguồn cụ thể (tài liệu truy hồi, kết quả công cụ) thay vì trí nhớ tham số của mô hình, và cho phép truy ngược từ nhận định về nguồn. Xem [[link:sinh/trich-dan-grounding]].</dd>
 <dt id="guardrail">Guardrail</dt>
@@ -229,7 +229,7 @@
 <h2 id="chu-s">S</h2>
 <dl class="glossary">
 <dt id="self-rag">Self-RAG</dt>
-<dd>Hướng tiếp cận huấn luyện mô hình tự quyết định khi nào cần truy hồi và tự đánh giá đoạn truy hồi cũng như câu trả lời của mình bằng các token phản tư đặc biệt. Xem [[link:nang-cao/agentic-graphrag]].</dd>
+<dd>Hướng tiếp cận huấn luyện mô hình tự quyết định khi nào cần truy hồi và tự đánh giá đoạn truy hồi cũng như câu trả lời của mình bằng các token phản tư đặc biệt (reflection token)[[cite:asai2023selfrag]]. Xem [[link:nang-cao/agentic-graphrag]].</dd>
 <dt id="semantic-cache">Semantic cache</dt>
 <dd>Bộ nhớ đệm trả lại câu trả lời đã có cho câu hỏi mới <em>gần nghĩa</em> với câu cũ (so bằng embedding). Giảm chi phí và độ trễ, nhưng có rủi ro trả câu trả lời cũ cho câu hỏi khác nghĩa tinh tế hoặc cho người dùng khác quyền. Xem [[link:van-hanh/chi-phi-do-tre]].</dd>
 <dt id="semantic-chunking">Semantic chunking</dt>

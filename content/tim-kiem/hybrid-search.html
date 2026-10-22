@@ -42,7 +42,7 @@ IDF(t) = ln( 1 + (N − n(t) + 0.5) / (n(t) + 0.5) )      ← dạng Lucene dùn
 tf(t,D) : số lần t xuất hiện trong D        |D|   : độ dài D (số token)
 n(t)    : số tài liệu chứa t                avgdl : độ dài trung bình
 N       : tổng số tài liệu                  k1, b : tham số (Lucene mặc định 1.2 và 0.75)</code></pre>
-<p>Công thức IDF và giá trị mặc định k1 = 1,2, b = 0,75 ở trên lấy từ Lucene, thư viện nền của Elasticsearch và OpenSearch[[cite:lucenebm25]]. Ba thành phần mang ba trực giác:</p>
+<p>Công thức IDF và giá trị mặc định k1 = 1,2, b = 0,75 ở trên lấy từ Lucene, thư viện nền của Elasticsearch và OpenSearch[[cite:lucenebm25]]. Lưu ý: mã nguồn BM25Similarity của Lucene 9 tính phần tf là tf / (tf + k1 × (1 − b + b × |D| / avgdl)), tức bỏ hệ số (k1 + 1) ở tử số; điểm Lucene/Elasticsearch trả về vì thế nhỏ hơn điểm tính theo công thức cổ điển một hằng số (k1 + 1 = 2,2 lần với mặc định), nhưng thứ hạng không đổi. Ví dụ dưới đây dùng công thức cổ điển. Ba thành phần mang ba trực giác:</p>
 <ul>
 <li><strong>IDF</strong> (inverse document frequency): từ xuất hiện ở ít tài liệu thì mang nhiều thông tin. “pin” trong kho tài liệu điện thoại có giá trị phân biệt hơn “bảo hành”.</li>
 <li><strong>k1 — bão hòa tần suất</strong>: một từ xuất hiện nhiều lần là dấu hiệu liên quan, nhưng lần thứ 10 không đáng giá bằng lần thứ 2. Phần tf có trần là k1 + 1.</li>
@@ -151,7 +151,7 @@ N       : tổng số tài liệu                  k1, b : tham số (Lucene m�
 <tr><td>D5</td><td>— (coi là 0)</td><td>0,50</td><td>0,25</td></tr>
 <tr><td>D7</td><td>0,00</td><td>— (coi là 0)</td><td>0,00</td></tr>
 </tbody></table>
-<p>Hãy để ý D3: cosine 0,79 gần như ngang 0,83 của D1, nhưng sau min-max lại thành 0 — chuẩn hóa đã <em>phóng đại</em> chênh lệch nhỏ của nhánh dense. Ngược lại, nếu cả ba điểm BM25 đều cao như nhau thì min-max lại biến chênh lệch nhỏ thành 0–1. Min-max cũng nhạy với một điểm ngoại lai. Các biến thể khác (z-score, chia cho điểm lớn nhất, hoặc dùng cận lý thuyết cho cosine) có điểm yếu riêng. Đổi lại, phương pháp trộn điểm cho phép chỉnh α theo dữ liệu: nếu bạn có bộ câu hỏi kiểm thử, có thể chọn α tối ưu cho miền của mình.</p>
+<p>Hãy để ý D3: cosine 0,79 gần như ngang 0,83 của D1, nhưng sau min-max lại thành 0 — chuẩn hóa đã <em>phóng đại</em> chênh lệch nhỏ của nhánh dense. Tương tự, nếu các điểm BM25 sát nhau thì min-max cũng kéo giãn chênh lệch nhỏ đó ra cả khoảng 0–1. Min-max cũng nhạy với một điểm ngoại lai. Các biến thể khác (z-score, chia cho điểm lớn nhất, hoặc dùng cận lý thuyết cho cosine) có điểm yếu riêng. Đổi lại, phương pháp trộn điểm cho phép chỉnh α theo dữ liệu: nếu bạn có bộ câu hỏi kiểm thử, có thể chọn α tối ưu cho miền của mình.</p>
 
 <h3>So sánh các cách hợp nhất</h3>
 <table>

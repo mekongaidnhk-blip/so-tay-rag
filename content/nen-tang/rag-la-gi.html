@@ -14,7 +14,7 @@
 <li><strong>RAG</strong> (Retrieval-Augmented Generation — sinh có tăng cường truy hồi) là cách cho LLM đọc các đoạn tài liệu liên quan <em>ngay lúc trả lời</em>, thay vì chỉ dựa vào những gì nó “nhớ” từ lúc huấn luyện.</li>
 <li>Pipeline cơ bản gồm hai pha: <strong>lập chỉ mục</strong> (làm một lần, cập nhật định kỳ) và <strong>truy vấn</strong> (mỗi câu hỏi: truy hồi → ghép ngữ cảnh → sinh câu trả lời).</li>
 <li>RAG hữu ích nhất khi kiến thức cần dùng <em>nằm trong tài liệu</em>, <em>thay đổi thường xuyên</em> hoặc <em>cần trích dẫn</em>. Nó không dạy mô hình kỹ năng mới hay thay đổi văn phong.</li>
-<li>Hầu hết lỗi của RAG trong thực tế đến từ khâu truy hồi và dữ liệu, không phải từ mô hình sinh.</li>
+<li>Theo kinh nghiệm thực hành, nhiều lỗi của RAG đến từ khâu truy hồi và dữ liệu chứ không chỉ từ mô hình sinh — vì vậy đổi LLM hiếm khi là cách sửa đầu tiên.</li>
 </ul>
 </div>
 
@@ -34,7 +34,7 @@
 <li><strong>Tri thức tham số (parametric)</strong>: được nén vào trọng số mô hình qua huấn luyện. Rộng, nhưng mờ, khó cập nhật và khó truy nguồn.</li>
 <li><strong>Tri thức phi tham số (non-parametric)</strong>: nằm trong một kho tài liệu bên ngoài có thể tìm kiếm. Cập nhật bằng cách thêm/xóa tài liệu, không cần huấn luyện lại, và mỗi mẩu thông tin có địa chỉ cụ thể.</li>
 </ul>
-<p>Cách phân chia này chính là khung lý thuyết trong bài báo đặt tên RAG của Lewis và cộng sự năm 2020, kết hợp một bộ truy hồi dense với mô hình sinh seq2seq[[cite:lewis2020]]. Cùng thời điểm, REALM đưa truy hồi vào ngay giai đoạn tiền huấn luyện[[cite:guu2020]], còn RETRO cho thấy một mô hình nhỏ hơn nhiều, khi được truy hồi từ kho hàng nghìn tỷ token, có thể đạt hiệu năng tương đương mô hình lớn trên một số benchmark mô hình hóa ngôn ngữ[[cite:borgeaud2022]].</p>
+<p>Cách phân chia này chính là khung lý thuyết trong bài báo đặt tên RAG của Lewis và cộng sự năm 2020, kết hợp một bộ truy hồi dense với mô hình sinh seq2seq[[cite:lewis2020]]. Cùng năm 2020, REALM đưa truy hồi vào ngay giai đoạn tiền huấn luyện[[cite:guu2020]]; sau đó RETRO (DeepMind, 2021) cho thấy một mô hình nhỏ hơn nhiều, khi được truy hồi từ kho hàng nghìn tỷ token, có thể đạt hiệu năng tương đương mô hình lớn trên một số benchmark mô hình hóa ngôn ngữ[[cite:borgeaud2022]].</p>
 
 <div class="callout nghien-cuu">
 <p><strong>RAG “gốc” khác RAG ngày nay.</strong> Trong bài báo năm 2020, bộ mã hóa truy vấn và mô hình sinh được <em>huấn luyện chung</em> đầu-cuối. Phần lớn hệ thống RAG hiện nay thì ghép các thành phần có sẵn — một mô hình embedding, một vector database, một LLM qua API — và <em>không huấn luyện chung</em>. Tên gọi giữ nguyên, nhưng khi đọc kết quả thí nghiệm trong các bài báo đời đầu, cần nhớ điều kiện khác biệt này.</p>
@@ -114,13 +114,13 @@
 
 <h2>Những hiểu lầm thường gặp</h2>
 <details class="qa"><summary>“RAG = vector database”</summary>
-<p>Vector database chỉ là một cách lưu chỉ mục. Nhiều hệ thống tốt kết hợp tìm kiếm từ khóa (BM25), bộ lọc metadata và reranker; một số trường hợp chỉ cần tìm kiếm từ khóa cũng đạt chất lượng tốt. Trên benchmark BEIR gồm 18 bộ dữ liệu đa miền, BM25 là một baseline zero-shot rất khó vượt và nhiều mô hình dense kém tổng quát hóa ra ngoài miền huấn luyện[[cite:thakur2021]]. “R” trong RAG là <em>retrieval</em> nói chung, không riêng vector.</p></details>
+<p>Vector database chỉ là một cách lưu chỉ mục. Nhiều hệ thống tốt kết hợp tìm kiếm từ khóa (BM25), bộ lọc metadata và reranker; một số trường hợp chỉ cần tìm kiếm từ khóa cũng đạt chất lượng tốt. Trên benchmark BEIR gồm 18 bộ dữ liệu đa miền, BM25 là một baseline zero-shot rất mạnh và nhiều mô hình dense thời đó kém tổng quát hóa ra ngoài miền huấn luyện[[cite:thakur2021]]. “R” trong RAG là <em>retrieval</em> nói chung, không riêng vector.</p></details>
 <details class="qa"><summary>“Có RAG thì mô hình sẽ không bịa nữa”</summary>
 <p>Không đúng. Mô hình vẫn có thể bỏ qua ngữ cảnh, trộn kiến thức tham số với tài liệu, hoặc diễn giải sai đoạn trích. Ngữ cảnh chứa đoạn không liên quan cũng có thể làm mô hình trả lời kém đi[[cite:shi2023]]. Vì vậy cần đo riêng độ trung thực (faithfulness) — xem [[link:danh-gia/danh-gia-generation]].</p></details>
 <details class="qa"><summary>“Ngữ cảnh dài hàng triệu token sẽ làm RAG lỗi thời”</summary>
 <p>Ngữ cảnh dài làm thay đổi đánh đổi, nhưng không xóa bỏ nhu cầu truy hồi: kho dữ liệu doanh nghiệp thường lớn hơn nhiều so với cửa sổ ngữ cảnh, chi phí và độ trễ tăng theo số token, và mô hình không phải lúc nào cũng sử dụng đều thông tin ở mọi vị trí trong ngữ cảnh dài[[cite:liu2023lost]]. Phân tích chi tiết ở [[link:nen-tang/khi-nao-dung-rag]].</p></details>
 <details class="qa"><summary>“Chỉ cần chọn LLM tốt nhất là đủ”</summary>
-<p>Trong một nghiên cứu tổng kết từ ba hệ thống RAG thực tế, Barnett và cộng sự liệt kê bảy điểm lỗi; phần lớn nằm trước bước sinh: nội dung không có trong kho, tài liệu đúng không lọt vào top-k, hoặc bị loại khi ghép ngữ cảnh[[cite:barnett2024]]. Đổi LLM không sửa được tài liệu bị truy hồi sai.</p></details>
+<p>Trong một nghiên cứu tổng kết từ ba hệ thống RAG thực tế, Barnett và cộng sự liệt kê bảy điểm lỗi; ba điểm đầu nằm trước bước sinh: nội dung không có trong kho, tài liệu đúng không lọt vào top-k, hoặc bị loại khi ghép ngữ cảnh[[cite:barnett2024]]. Đổi LLM không sửa được tài liệu bị truy hồi sai.</p></details>
 
 <div class="callout nhan-dinh">
 <p>Theo kinh nghiệm của người biên soạn, cách hiệu quả nhất để học RAG là xây một pipeline tối thiểu thật sớm, tạo ngay một bộ câu hỏi kiểm thử khoảng 30–50 câu với đáp án biết trước, rồi cải tiến từng thành phần <em>dựa trên số đo</em>. Đọc về hàng chục kỹ thuật nâng cao trước khi có bộ kiểm thử thường dẫn đến tối ưu những thứ không phải điểm nghẽn. Đây là nhận định thực hành, không phải kết quả nghiên cứu; xem [[link:thuc-hanh/rag-dau-tien]] để bắt đầu.</p>

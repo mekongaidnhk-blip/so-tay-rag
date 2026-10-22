@@ -36,7 +36,7 @@
 <tbody>
 <tr><td>Có danh sách nguồn dữ liệu được đưa vào, chủ sở hữu từng nguồn và tần suất cập nhật</td><td>Khi câu trả lời sai vì tài liệu cũ, cần biết ai sửa và bao lâu thì chỉ mục phản ánh bản sửa</td><td>[[link:du-lieu/thu-thap-lam-sach]]</td></tr>
 <tr><td>Đã đọc tận mắt mẫu văn bản sau trích xuất (ít nhất vài chục tài liệu, gồm PDF scan, bảng, tài liệu nhiều cột)</td><td>Lỗi trích xuất (mất bảng, đảo thứ tự cột, ký tự lỗi) im lặng làm hỏng mọi bước sau và không hiện ra trong log</td><td>[[link:du-lieu/thu-thap-lam-sach]]</td></tr>
-<tr><td>Văn bản được chuẩn hóa Unicode (NFC) và loại bỏ header/footer, menu lặp lại</td><td>Tiếng Việt có hai cách mã hóa dấu trông giống hệt nhau; khác mã hóa làm tìm kiếm từ khóa trượt</td><td>[[link:thuc-hanh/rag-dau-tien#tach-tu-tieng-viet|Ví dụ trong bài thực hành]]</td></tr>
+<tr><td>Văn bản được chuẩn hóa Unicode (NFC) và loại bỏ header/footer, menu lặp lại</td><td>Tiếng Việt có hai cách mã hóa dấu trông giống hệt nhau; khác mã hóa làm tìm kiếm từ khóa trượt</td><td>[[link:du-lieu/thu-thap-lam-sach#chuan-hoa-unicode-nfc-va-nfd|Chuẩn hóa Unicode: NFC và NFD]]</td></tr>
 <tr><td>Có quy trình khử trùng lặp và xử lý nhiều phiên bản của cùng một văn bản</td><td>Hai phiên bản quy định cùng được truy hồi khiến mô hình trả lời theo bản đã hết hiệu lực hoặc trộn cả hai</td><td>[[link:du-lieu/metadata-va-bieu-dien]]</td></tr>
 <tr><td>Mỗi chunk mang metadata tối thiểu: nguồn, tiêu đề, ngày hiệu lực/cập nhật, quyền truy cập</td><td>Cần cho lọc, trích dẫn, phân quyền và cho người dùng tự đánh giá độ mới</td><td>[[link:du-lieu/metadata-va-bieu-dien]]</td></tr>
 <tr><td>Chiến lược chunking được chọn dựa trên đo đạc, không phải giá trị mặc định của framework</td><td>Kích thước và ranh giới chunk ảnh hưởng trực tiếp tới truy hồi; giá trị tốt phụ thuộc loại tài liệu</td><td>[[link:du-lieu/chunking]]</td></tr>
@@ -51,7 +51,7 @@
 <tr><td>Mô hình embedding được chọn bằng đánh giá trên dữ liệu thật, không chỉ theo bảng xếp hạng</td><td>MTEB cho thấy không có mô hình nào thắng ở mọi tác vụ[[cite:muennighoff2022]]; điểm trung bình trên bảng xếp hạng không phản ánh tiếng Việt chuyên ngành</td><td>[[link:truy-hoi/embedding]]</td></tr>
 <tr><td>Dùng đúng quy ước đầu vào của mô hình embedding (tiền tố, instruction, giới hạn độ dài)</td><td>Sai quy ước làm chất lượng giảm mà không có lỗi nào được báo; văn bản vượt giới hạn token bị cắt im lặng</td><td>[[link:truy-hoi/embedding]]</td></tr>
 <tr><td>Cấu hình chỉ mục vector (HNSW, IVF…) được kiểm tra recall so với tìm kiếm chính xác</td><td>Tìm kiếm gần đúng đánh đổi độ chính xác lấy tốc độ; tham số mặc định có thể làm mất kết quả đúng</td><td>[[link:truy-hoi/vector-index]]</td></tr>
-<tr><td>Đã quyết định có dùng reranker hay không dựa trên khoảng cách giữa Hit@1 và Hit@k lớn</td><td>Reranker giúp khi tài liệu đúng đã có trong top-k nhưng xếp thấp; nó không giúp nếu tài liệu đúng không được truy hồi</td><td>[[link:tim-kiem/reranking]]</td></tr>
+<tr><td>Đã quyết định có dùng reranker hay không dựa trên khoảng cách giữa Hit@1 và Hit@k (với k lớn, ví dụ 20–50)</td><td>Reranker giúp khi tài liệu đúng đã có trong top-k nhưng xếp thấp; nó không giúp nếu tài liệu đúng không được truy hồi</td><td>[[link:tim-kiem/reranking]]</td></tr>
 <tr><td>Kiểm tra riêng các loại câu khó: mã số, tên riêng, viết tắt, câu hỏi nhiều ý, câu hỏi tiếp nối trong hội thoại</td><td>Đây là những nhóm hay bị điểm trung bình che khuất</td><td>[[link:tim-kiem/xu-ly-truy-van]]</td></tr>
 <tr><td>Bộ lọc metadata (thời gian, đơn vị, sản phẩm) được áp dụng khi câu hỏi cần</td><td>Tìm kiếm ngữ nghĩa không tự hiểu “quy định năm nay” hay “chi nhánh Hà Nội”</td><td>[[link:du-lieu/metadata-va-bieu-dien]]</td></tr>
 </tbody></table></div>
@@ -122,7 +122,7 @@
 <li><strong>Chất lượng được đánh giá bằng cảm nhận</strong> (“demo thấy ổn”) thay vì con số trên bộ kiểm thử có đáp án.</li>
 <li><strong>Không ai trả lời được “vì sao câu này sai”</strong> trong vòng vài phút, vì log không ghi chunk được truy hồi.</li>
 <li><strong>Phân quyền nằm trong prompt</strong> (“không được tiết lộ tài liệu của phòng Nhân sự”) thay vì trong bộ lọc truy hồi.</li>
-<li><strong>Hệ thống không bao giờ nói “không biết”</strong> trong thử nghiệm — gần như chắc chắn nó đang bịa ở những câu ngoài phạm vi.</li>
+<li><strong>Hệ thống không bao giờ nói “không biết”</strong> trong thử nghiệm có cả câu ngoài phạm vi — gần như chắc chắn nó đang bịa ở những câu đó.</li>
 <li><strong>Không có chủ sở hữu dữ liệu</strong>: không ai chịu trách nhiệm khi tài liệu nguồn sai hoặc hết hiệu lực.</li>
 <li><strong>Mọi cải tiến gần đây là thêm kỹ thuật</strong> (reranker, agent, GraphRAG) mà chưa từng đo baseline đơn giản.</li>
 <li><strong>Chi phí mỗi truy vấn chưa được ước tính</strong>, hoặc chỉ được ước tính với độ dài ngữ cảnh lúc demo.</li>

@@ -40,7 +40,7 @@ export function slugify(s) {
     .toLowerCase().replace(/&[a-z]+;/g, '')
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
-const stripTags = (h) => h.replace(/<script[\s\S]*?<\/script>/g, ' ').replace(/<style[\s\S]*?<\/style>/g, ' ')
+const stripTags = (h) => h.replace(/<script[\s\S]*?<\/script>/g, ' ').replace(/<style[\s\S]*?<\/style>/g, ' ').replace(/<svg[\s\S]*?<\/svg>/g, ' ').replace(/<pre[\s\S]*?<\/pre>/g, ' ')
   .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
   .replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim();
 
@@ -100,6 +100,7 @@ function existsTarget(id) {
 }
 
 // ---------- shortcode ----------
+const crossAnchors = []; // liên kết kiểu [[link:trang#neo]] — kiểm tra sau khi render xong mọi trang
 function renderBody(page) {
   let html = page.body;
   const citeOrder = [];
@@ -118,6 +119,7 @@ function renderBody(page) {
   html = html.replace(/\[\[link:([^\]|#]+)(#[^\]|]*)?(?:\|([^\]]+))?\]\]/g, (_, id, hash, text) => {
     id = id.trim();
     if (!existsTarget(id)) { warn(`${page.id}: liên kết hỏng tới "${id}"`); return text || id; }
+    if (hash && hash.length > 1) crossAnchors.push({ from: page.id, to: id, hash: hash.slice(1) });
     return `<a href="${rel(page.id, urlOf(id))}${hash || ''}">${text || esc(titleOf(id))}</a>`;
   });
   // [[src:id]] -> liên kết trực tiếp tới nguồn (dùng trong bảng)
@@ -229,7 +231,7 @@ ${sidebar(id)}
 <div class="nav-backdrop" id="nav-backdrop" hidden></div>
 <main id="noi-dung" class="main" tabindex="-1">
 ${tocHtml}
-${content}
+${tocHtml ? content.replace('</header>', '</header>' + tocHtml.replace('class="toc"', 'class="toc toc-inline"').replace(' open>', '>')) : content}
 </main>
 </div>
 <footer class="footer">
@@ -297,6 +299,10 @@ for (const [id, page] of pages) {
   const r = renderBody(page);
   rendered.set(id, r);
   for (const sid of r.citeOrder) (citedBy[sid] ||= []).push(id);
+}
+for (const { from, to, hash } of crossAnchors) {
+  const r = rendered.get(to);
+  if (!r || !new RegExp(`id="${hash.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`).test(r.html)) warn(`${from}: neo #${hash} không tồn tại trong ${to}`);
 }
 
 for (const [id, page] of pages) {

@@ -99,7 +99,7 @@
 <p><strong>IVF</strong> (Inverted File) dùng k-means chia không gian thành <code>nlist</code> cụm, mỗi cụm có một tâm. Mỗi vector được gán vào cụm có tâm gần nhất. Khi tìm, chỉ so truy vấn với các tâm, chọn <code>nprobe</code> cụm gần nhất và chỉ quét vector trong các cụm đó. Giống tra từ điển: mở đúng vần trước, rồi mới đọc từng mục.</p>
 <ul>
 <li><strong>Cần huấn luyện</strong>: k-means phải chạy trên một mẫu dữ liệu trước khi thêm vector. pgvector khuyên chỉ tạo chỉ mục IVFFlat <em>sau khi</em> bảng đã có dữ liệu[[cite:pgvector]].</li>
-<li><strong>Điểm khởi đầu cho số cụm</strong>: Faiss gợi ý 4√N tới 16√N cụm cho kho dưới 1 triệu vector, và các cấu hình lớn hơn (ví dụ 65.536 cụm) cho kho hàng triệu tới hàng tỷ vector, với 30–256 vector huấn luyện cho mỗi cụm[[cite:faisswiki]]. pgvector gợi ý <code>lists</code> = số dòng / 1000 tới 1 triệu dòng và √(số dòng) khi lớn hơn; <code>probes</code> khởi đầu ở √(lists)[[cite:pgvector]].</li>
+<li><strong>Điểm khởi đầu cho số cụm</strong>: Faiss gợi ý 4√N tới 16√N cụm cho kho dưới 1 triệu vector, và số cụm tăng theo quy mô (65.536 cụm cho 1–10 triệu vector, tới 2<sup>20</sup> ≈ 1 triệu cụm cho kho cỡ tỷ vector), với 30–256 vector huấn luyện cho mỗi cụm[[cite:faisswiki]]. pgvector gợi ý <code>lists</code> = số dòng / 1000 tới 1 triệu dòng và √(số dòng) khi lớn hơn; <code>probes</code> khởi đầu ở √(lists)[[cite:pgvector]].</li>
 <li><strong>Nhược điểm</strong>: truy vấn nằm gần ranh giới cụm có thể bỏ sót lân cận ở cụm bên cạnh (tăng <code>nprobe</code> để bù); nếu phân phối dữ liệu thay đổi nhiều sau khi huấn luyện (ví dụ thêm hẳn một mảng tài liệu mới), cụm trở nên lệch và cần huấn luyện lại.</li>
 </ul>
 <p>So với HNSW, pgvector mô tả IVFFlat xây nhanh hơn và tốn ít bộ nhớ hơn, nhưng đánh đổi tốc độ–recall kém hơn[[cite:pgvector]].</p>
@@ -121,7 +121,7 @@
 <thead><tr><th>Cấu hình</th><th>Phép tính</th><th>Xấp xỉ</th></tr></thead>
 <tbody>
 <tr><td>Vector thô float32</td><td>10⁷ × 1.024 × 4 byte</td><td>41 GB</td></tr>
-<tr><td>HNSW, M = 16 (Faiss)</td><td>41 GB + 10⁷ × (16 × 2 × 4) byte</td><td>41 + 1,3 ≈ 42,2 GB</td></tr>
+<tr><td>HNSW, M = 16 (Faiss)</td><td>41 GB + 10⁷ × (16 × 2 × 4) byte</td><td>40,96 + 1,28 ≈ 42,2 GB</td></tr>
 <tr><td>HNSW, M = 32</td><td>41 GB + 10⁷ × 256 byte</td><td>≈ 43,5 GB</td></tr>
 <tr><td>Vector int8 (lượng tử hóa vô hướng)</td><td>10⁷ × 1.024 × 1 byte</td><td>10,2 GB (+ liên kết đồ thị nếu dùng HNSW)</td></tr>
 <tr><td>Vector nhị phân</td><td>10⁷ × 1.024 / 8 byte</td><td>1,3 GB</td></tr>

@@ -83,7 +83,7 @@
 </figure>
 
 <h3>Cross-encoder: đọc câu hỏi và đoạn văn cùng lúc</h3>
-<p>Cross-encoder nối câu hỏi và đoạn văn thành một chuỗi, đưa qua Transformer, và xuất một điểm liên quan. Vì cơ chế attention cho phép từng token của câu hỏi “nhìn” từng token của đoạn văn, mô hình nhận ra những chi tiết như “trước hạn” đi với “tất toán trước hạn” chứ không phải “kỳ hạn 12 tháng”. Điểm yếu cũng chính là điểm mạnh: không thể tính trước gì cho tài liệu, mỗi cặp cần một lượt chạy mô hình. Đó là lý do cross-encoder chỉ dùng cho danh sách ngắn — với toàn kho thì quá chậm, như phép tính 65 giờ cho 10.000 câu mà Sentence-BERT nêu[[cite:reimers2019]].</p>
+<p>Cross-encoder nối câu hỏi và đoạn văn thành một chuỗi, đưa qua Transformer, và xuất một điểm liên quan. Vì cơ chế attention cho phép từng token của câu hỏi “nhìn” từng token của đoạn văn, mô hình nhận ra những chi tiết như “trước hạn” đi với “tất toán trước hạn” chứ không phải “kỳ hạn 12 tháng”. Cái giá của điểm mạnh này: không thể tính trước gì cho tài liệu, mỗi cặp cần một lượt chạy mô hình. Đó là lý do cross-encoder chỉ dùng cho danh sách ngắn — với toàn kho thì quá chậm. Bài báo Sentence-BERT nêu một ví dụ: tìm cặp câu giống nhau nhất trong 10.000 câu bằng BERT dạng cross-encoder cần khoảng 50 triệu lượt suy luận, tức khoảng 65 giờ[[cite:reimers2019]].</p>
 <div class="callout nghien-cuu">
 <p>Nogueira và Cho (2019) dùng BERT làm cross-encoder đơn giản để rerank đoạn văn (thường gọi là monoBERT): mô hình đứng đầu bảng xếp hạng MS MARCO passage retrieval lúc đó, hơn hệ thống tốt nhất trước đó 27% MRR@10 (tương đối), và đạt kết quả tốt nhất trên TREC-CAR[[cite:nogueira2019]]. Điều kiện: dữ liệu tiếng Anh, tìm kiếm web (MS MARCO), mô hình và phần cứng năm 2019. Kết quả này mở đầu làn sóng reranker dựa trên Transformer, nhưng mức cải thiện trên dữ liệu của bạn phải đo lại.</p>
 </div>
@@ -138,7 +138,7 @@
 <h2>Đánh giá reranker như thế nào</h2>
 <ul>
 <li><strong>So sánh trên cùng tập ứng viên</strong>: giữ nguyên giai đoạn 1, so nDCG@k và Recall@k (k = số đoạn đưa vào prompt) giữa “không rerank” và “có rerank”. Như vậy mọi khác biệt đến từ reranker.</li>
-<li><strong>Tách hai trần</strong>: Recall@N của giai đoạn 1 là trần; khoảng cách giữa Recall@k sau rerank và trần đó là phần reranker còn có thể cải thiện.</li>
+<li><strong>Tách trần và khoảng còn cải thiện</strong>: Recall@N của giai đoạn 1 là trần; khoảng cách giữa Recall@k sau rerank và trần đó là phần reranker còn có thể cải thiện.</li>
 <li><strong>Đo cuối chuỗi</strong>: tốt hơn ở nDCG chưa chắc tốt hơn ở câu trả lời. Kiểm tra thêm chất lượng câu trả lời và độ trung thực — xem [[link:danh-gia/danh-gia-generation]].</li>
 <li><strong>Đo theo nhóm câu hỏi</strong>: câu có mã/số, câu không dấu, câu nhiều ý. Reranker có thể giúp nhóm này và hại nhóm khác.</li>
 <li><strong>Đo chi phí</strong>: độ trễ p50/p95, chi phí GPU hoặc token.</li>

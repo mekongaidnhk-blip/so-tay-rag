@@ -54,15 +54,14 @@
   // ---------- Mục lục: đánh dấu mục đang đọc ----------
   var tocLinks = $$('.toc a');
   if (tocLinks.length && 'IntersectionObserver' in window) {
-    var map = {}; tocLinks.forEach(function (a) { map[a.getAttribute('href').slice(1)] = a; });
+    var map = {}; tocLinks.forEach(function (a) { var k = a.getAttribute('href').slice(1); (map[k] = map[k] || []).push(a); });
     var heads = $$('.prose h2[id], .prose h3[id]');
     var obs = new IntersectionObserver(function (entries) {
       entries.forEach(function (en) {
-        if (en.isIntersecting && map[en.target.id]) { tocLinks.forEach(function (a) { a.classList.remove('active'); }); map[en.target.id].classList.add('active'); }
+        if (en.isIntersecting && map[en.target.id]) { tocLinks.forEach(function (a) { a.classList.remove('active'); }); map[en.target.id].forEach(function (a) { a.classList.add('active'); }); }
       });
     }, { rootMargin: '-60px 0px -70% 0px' });
     heads.forEach(function (h) { obs.observe(h); });
-    if (window.matchMedia('(max-width: 1279px)').matches) { var d = $('.toc details'); if (d) d.open = false; }
   }
 
   // ---------- Tìm kiếm ----------
