@@ -12,6 +12,7 @@ Yêu cầu Node.js 18+ (không cần cài thư viện).
 node build.mjs                      # sinh dist/, kiểm tra liên kết nội bộ & trích dẫn
 python3 -m http.server 8765 -d dist # xem tại http://localhost:8765
 node tools/check-external.mjs       # kiểm tra liên kết ngoài
+node tools/check-live.mjs           # crawl website đã xuất bản, mọi trang/tài nguyên phải trả 200
 ```
 
 Mỗi lần push lên `main`, GitHub Actions build và triển khai lên GitHub Pages (`.github/workflows/pages.yml`).
